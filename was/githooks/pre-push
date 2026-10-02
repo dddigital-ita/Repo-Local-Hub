@@ -1,0 +1,33 @@
+#!/bin/sh
+# PRE-PUSH GUARD — ultima barriera prima che una violazione lasci il repo.
+#
+# Fa girare l'overlay guard (bug «containing block»: un `position:fixed`
+# montato dentro una superficie con backdrop-filter si dimensiona sulla
+# superficie, non sul viewport — vedi scripts/overlay-guard.mjs e il fix
+# della palette cmd-K, commit 8e5c7ba) PRIMA che il push parta.
+# Esito 1 -> il push e' bloccato.
+#
+# Attivazione: `npm install` imposta core.hooksPath via postinstall
+# (vedi package.json). Per saltarlo in emergenza cosciente:
+#   git push --no-verify
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Nessun node_modules (es. push da una checkout fresca): non bloccare,
+# la build e la CI eseguono comunque il guard.
+if [ ! -d node_modules ]; then
+  echo "pre-push: node_modules assente, overlay guard saltato (la build lo eseguira')" >&2
+  exit 0
+fi
+
+echo "pre-push: lint (ESLint CLI)..."
+npm run lint
+
+echo "pre-push: overlay guard..."
+node scripts/overlay-guard.mjs
+
+echo "pre-push: icon inline guard..."
+node scripts/icon-inline-guard.mjs --quiet

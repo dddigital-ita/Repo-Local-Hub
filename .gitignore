@@ -1,0 +1,16 @@
+# Local dependencies, builds, and deployment metadata
+**/node_modules/
+**/.next/
+**/.next-*/
+**/.vercel/
+**/out/
+
+# Environment files: commit only the documented template
+**/.env*
+!**/.env.example
+
+# Local test output and OS files
+**/test-results/
+**/playwright-report/
+**/*.tsbuildinfo
+**/.DS_Store

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Ambrosio AI">
+  <!-- Ambrosio AI — marchio HIG v3, monocromo BIANCO su trasparente.
+       Per su-scuro/inline: usare fill/stroke currentColor -->
+  <defs>
+    <clipPath id="ambrosioCutBianco">
+      <rect x="0" y="0" width="512" height="445"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#ambrosioCutBianco)" fill="none" stroke="#FFFFFF" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="4">
+    <path d="M88 480 L256 139 L424 480" stroke-width="72"/>
+    <path d="M175.4 302.5 A96.2 96.2 0 0 0 336.6 302.5" stroke-width="72"/>
+  </g>
+  <!-- Sparkle AI (stile Gemini) in alto a sx -->
+  <path fill="#FFFFFF" d="M122 154 C122 180.4 139.6 198 166 198 C139.6 198 122 215.6 122 242 C122 215.6 104.4 198 78 198 C104.4 198 122 180.4 122 154 Z"/>
+</svg>

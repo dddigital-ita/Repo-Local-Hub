@@ -1,0 +1,290 @@
+/* ════════════════════════════════════════════════════════════════
+   CHAT STILE TELEGRAM (Prompt 7) — bolle con gradient animato,
+   avatar circolari con anello, emoji picker. Regole di casa:
+   - colori SEMPRE da token (--brand-*, --surface-*, --slate-*) così
+     temi e dark mode seguono da soli (nessun hex nei componenti);
+   - le bolle NON usano backdrop-filter (le righe sono animate in
+     transform da framer-motion: artefatti Chromium, vedi .glass-solid);
+   - l'animazione del gradient muove SOLO background-position e si spegne
+     sotto prefers-reduced-motion.
+   ════════════════════════════════════════════════════════════════ */
+
+.chat-row {
+  display: flex;
+}
+
+/* ── Avatar stile Telegram: anello doppio, iniziale o foto ── */
+.chat-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  overflow: hidden;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 2px rgb(var(--surface-white) / 0.9),
+    0 0 0 3.5px rgb(var(--brand-300) / 0.5);
+}
+
+.chat-avatar--agent {
+  background: rgb(var(--brand-100));
+  color: rgb(var(--brand-700));
+}
+
+.chat-avatar--visitor {
+  background: linear-gradient(135deg, #2aabee, #229ed9);
+  color: #ffffff;
+}
+
+.chat-avatar--ai {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color: #ffffff;
+}
+
+html[data-mode="dark"] .chat-avatar {
+  box-shadow:
+    0 0 0 2px rgb(var(--surface-white) / 0.9),
+    0 0 0 3.5px rgb(var(--brand-300) / 0.35);
+}
+
+/* ── Bolla base: raggio asimmetrico verso l'altro capo della riga ── */
+.chat-bubble {
+  border-radius: 16px;
+}
+.chat-bubble--visitor {
+  border-bottom-right-radius: 6px;
+}
+.chat-bubble--ai {
+  border-bottom-left-radius: 6px;
+}
+
+/* Agente: vetro solido (stessi token di .glass-solid, senza backdrop-filter) */
+.chat-bubble--ai {
+  background: rgb(var(--surface-white) / 0.92);
+  border: 1px solid rgb(var(--surface-white) / 0.65);
+  box-shadow:
+    var(--shadow-drop),
+    inset 0 1px 0 rgb(var(--surface-white) / 0.75);
+  color: rgb(var(--slate-800));
+}
+
+/* Ambrosio: bordo e alone viola, l'AI si riconosce al volo */
+.chat-bubble--ambrosio {
+  border-color: rgb(139 92 246 / 0.35);
+  box-shadow:
+    0 0 0 1px rgb(139 92 246 / 0.18),
+    var(--shadow-drop);
+}
+
+.chat-ai-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.25rem;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c3aed;
+}
+html[data-mode="dark"] .chat-ai-label {
+  color: #c4b5fd;
+}
+
+/* Visitatore: gradient brand ANIMATO (solo background-position) */
+.chat-bubble--visitor {
+  background: linear-gradient(
+    120deg,
+    rgb(var(--brand-600)) 0%,
+    rgb(var(--brand-500)) 45%,
+    rgb(var(--brand-400)) 100%
+  );
+  background-size: 220% 220%;
+  color: rgb(var(--on-brand, 255 255 255));
+  box-shadow: var(--shadow-glass-btn);
+  animation: chat-gradient-flow 8s ease-in-out infinite;
+}
+
+@keyframes chat-gradient-flow {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Orario dentro la bolla */
+.chat-time {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 10px;
+  color: rgb(var(--slate-400));
+}
+.chat-bubble--visitor .chat-time {
+  color: rgb(255 255 255 / 0.75);
+}
+
+/* ── Emoji picker (frimousse, vestito glass) ──
+   Il pacchetto è unstyled: ogni parte è presa di mira con la classe
+   passata al componente. Colori SEMPRE da token (dark mode inclusa),
+   celle grandi (target touch generoso) e gradient del visitatore fuori.
+   Structura: pop (dialog) → root → searchbox → viewport → list → footer. */
+.chat-emoji-pop {
+  margin: 0 auto 8px;
+  max-width: 28rem;
+  border-radius: 20px;
+  padding: 0;
+  overflow: hidden; /* il vetro arrotondato taglia search e footer */
+}
+
+.chat-emoji-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* frimousse misura le righe: l'altezza canta dalla viewport */
+  isolation: isolate;
+}
+
+/* Ricerca: barra sottile sotto il tetto della pillola */
+.chat-emoji-searchbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  border-bottom: 1px solid rgb(var(--surface-white) / 0.65);
+}
+
+.chat-emoji-search-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  color: rgb(var(--slate-400));
+}
+
+.chat-emoji-search {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  padding: 0.25rem 0;
+  font-size: 0.875rem;
+  color: rgb(var(--slate-700));
+}
+.chat-emoji-search::placeholder {
+  color: rgb(var(--slate-400));
+}
+
+/* Viewport: la zona scrollabile (altezza fissa, virtualizzazione frimousse) */
+.chat-emoji-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  height: 15rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 0 0.375rem;
+}
+
+/* Loading / Empty: assoluti dentro la viewport, sopra la lista */
+.chat-emoji-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8125rem;
+  color: rgb(var(--slate-400));
+}
+
+/* Lista virtualizzata: le righe sono flex (frimousse misura l'altezza) */
+.chat-emoji-list {
+  user-select: none;
+  padding-bottom: 0.25rem;
+}
+
+.chat-emoji-row {
+  display: flex;
+  padding: 0 0.125rem;
+}
+
+/* Header categoria sticky: fascia quasi bianca sopra la griglia */
+.chat-emoji-cat {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgb(var(--surface-white) / 0.92);
+  padding: 0.625rem 0.5rem 0.25rem;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgb(var(--slate-400));
+}
+
+/* Celle emoji: cerchi generosi (target touch), attiva evidenziata */
+.chat-emoji-cell {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.375rem;
+  line-height: 1;
+  border-radius: 14px;
+  font-family: var(--frimousse-emoji-font);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.chat-emoji-cell:hover,
+.chat-emoji-cell[data-active] {
+  background: rgb(var(--brand-50));
+}
+.chat-emoji-cell:active {
+  transform: scale(0.9);
+}
+.chat-emoji-cell:focus-visible {
+  outline: 2px solid rgb(var(--brand-600));
+  outline-offset: 2px;
+}
+
+/* Footer: anteprima dell'emoji attiva (hover o frecce) */
+.chat-emoji-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: var(--frimousse-viewport-width, 100%);
+  min-height: 2.25rem;
+  padding: 0.375rem 0.875rem;
+  border-top: 1px solid rgb(var(--surface-white) / 0.65);
+}
+
+.chat-emoji-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.chat-emoji-preview-glyph {
+  font-size: 1.125rem;
+  line-height: 1;
+  font-family: var(--frimousse-emoji-font);
+}
+
+.chat-emoji-preview-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  color: rgb(var(--slate-500));
+}
+
+.chat-emoji-preview-hint {
+  color: rgb(var(--slate-400));
+}
+
+/* ── Accessibilità: niente movimento se l'utente lo chiede ── */
+@media (prefers-reduced-motion: reduce) {
+  .chat-bubble--visitor {
+    animation: none;
+  }
+}

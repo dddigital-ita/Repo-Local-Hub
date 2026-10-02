@@ -1,0 +1,432 @@
+/* ════════════════════════════════════════════════════════════════
+   HERO ANIMATO «serissimo stile Apple» (tools → hero, chiave site_hero)
+   Quattro template che condividono la struttura e cambiano luce/testo.
+   Regole di casa:
+   - solo transform/opacity/background-position → GPU, niente layout;
+   - NESSUN backdrop-filter nuovo (containing block bug, vedi in alto);
+   - tutto spento sotto prefers-reduced-motion;
+   - l'accento del titolo usa --hero-accent (default: token brand).
+   ════════════════════════════════════════════════════════════════ */
+
+/* L'accento personalizzato arriva come --hero-accent dall'elemento
+   antenato (page.tsx); il fallback «var(--hero-accent, …)» qui sotto
+   usa il token brand quando l'admin non ha scelto un colore. */
+
+/* ── Titolo sfumato (gradient-flow) ── */
+.hero-gradient-text {
+  background: linear-gradient(
+    100deg,
+    rgb(var(--hero-accent, var(--brand-600))) 0%,
+    rgb(var(--brand-300)) 25%,
+    rgb(var(--hero-accent, var(--brand-600))) 50%,
+    rgb(var(--brand-300)) 75%,
+    rgb(var(--hero-accent, var(--brand-600))) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: hero-gradient-pan 9s ease-in-out infinite alternate;
+}
+[data-gradient-dir="vertical"] .hero-animated .hero-gradient-text {
+  background: linear-gradient(
+    190deg,
+    rgb(var(--hero-accent, var(--brand-600))) 0%,
+    rgb(var(--brand-300)) 25%,
+    rgb(var(--hero-accent, var(--brand-600))) 50%,
+    rgb(var(--brand-300)) 75%,
+    rgb(var(--hero-accent, var(--brand-600))) 100%
+  );
+  background-size: 100% 220%;
+  animation-name: hero-gradient-pan-y;
+}
+[data-gradient-dir="diagonal"] .hero-animated .hero-gradient-text {
+  background: linear-gradient(
+    135deg,
+    rgb(var(--hero-accent, var(--brand-600))) 0%,
+    rgb(var(--brand-300)) 25%,
+    rgb(var(--hero-accent, var(--brand-600))) 50%,
+    rgb(var(--brand-300)) 75%,
+    rgb(var(--hero-accent, var(--brand-600))) 100%
+  );
+  background-size: 220% 220%;
+  animation-name: hero-gradient-pan;
+}
+@keyframes hero-gradient-pan {
+  from { background-position: 0% 50%; }
+  to   { background-position: 100% 50%; }
+}
+@keyframes hero-gradient-pan-y {
+  from { background-position: 50% 0%; }
+  to   { background-position: 50% 100%; }
+}
+
+/* ── Spotlight: sheen che attraversa il titolo (una volta, sereno).
+      Condiviso col template «aurora»: la luce che passa sul titolo una
+      volta sola lega i due template senza aggiungere animazioni. ── */
+.hero-animated[data-template="spotlight"] h1,
+.hero-animated[data-template="aurora"] h1 {
+  position: relative;
+}
+.hero-animated[data-template="spotlight"] h1::after,
+.hero-animated[data-template="aurora"] h1::after {
+  content: "";
+  position: absolute;
+  inset: -8% -4%;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgb(255 255 255 / 0.55) 50%,
+    transparent 62%
+  );
+  background-size: 260% 100%;
+  background-position: 120% 0;
+  mix-blend-mode: overlay;
+  animation: hero-sheen 2.8s cubic-bezier(0.32, 0.72, 0, 1) 0.9s 1 both;
+}
+@keyframes hero-sheen {
+  from { background-position: 120% 0; }
+  to   { background-position: -120% 0; }
+}
+
+/* ── Lens: anello di luce che ruota attorno alla barra ── */
+.hero-lens-wrap { position: relative; }
+.hero-lens-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from var(--lens-angle, 0deg),
+    rgb(var(--hero-accent, var(--brand-600)) / 0) 0deg,
+    rgb(var(--hero-accent, var(--brand-600)) / 0.55) 40deg,
+    rgb(var(--hero-accent, var(--brand-600)) / 0) 100deg,
+    rgb(var(--hero-accent, var(--brand-600)) / 0) 360deg
+  );
+  filter: blur(6px);
+  opacity: 0.85;
+  animation: hero-lens-spin 7s linear infinite;
+  pointer-events: none;
+}
+@property --lens-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes hero-lens-spin {
+  to { --lens-angle: 360deg; }
+}
+/* Fallback senza @property (Safari < 16.4): rotazione dell'intero anello */
+@supports not (background: conic-gradient(from 0deg, red, blue)) {
+  .hero-lens-wrap::before {
+    background: radial-gradient(
+      60% 120% at 50% 0%,
+      rgb(var(--hero-accent, var(--brand-600)) / 0.4),
+      transparent 70%
+    );
+    animation: none;
+  }
+}
+
+/* ── Gradient-flow: riflesso soffuso sotto la barra ── */
+.hero-reflection-wrap { position: relative; }
+.hero-reflection-wrap::after {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -26px;
+  height: 34px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    55% 100% at 50% 0%,
+    rgb(var(--hero-accent, var(--brand-600)) / 0.28),
+    transparent 75%
+  );
+  filter: blur(10px);
+  animation: hero-breathe 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes hero-breathe {
+  0%, 100% { opacity: 0.55; transform: scaleX(1); }
+  50%      { opacity: 1;    transform: scaleX(1.06); }
+}
+
+/* ── Cursore dell'hero: QUATTRO temi minimali scelti in admin.
+      Colore da --hero-cursor-rgb (fallback: token brand). Gradienti puri,
+      niente blur su superfici fixed → nessun containing block. Opacità a 0
+      di default: si accende solo con html[data-hero-cursor="on"], cioè
+      mentre l'hero è a schermo. Il tema arriva da data-hero-cursor-mode. ── */
+.hero-cursor-dot,
+.hero-cursor-trail {
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.hero-cursor-trail { transition-duration: 0.7s; }
+html[data-hero-cursor="on"] .hero-cursor-dot { opacity: 1; }
+html[data-hero-cursor="on"] .hero-cursor-trail { opacity: 1; }
+/* Il fade-out al rientro «porta indietro» la scia dall'alto → il glow
+   volante al primo scroll dopo l'uscita dall'hero. Un fade-out ISTANTANEO
+   la spegne senza viaggio (stop() la posa già fuori schermo). */
+html:not([data-hero-cursor="on"]) .hero-cursor-dot,
+html:not([data-hero-cursor="on"]) .hero-cursor-trail { transition: none; }
+
+/* ── Tema «glow» (default): SOLO l'alone che segue il puntatore — il punto
+      è stato tolto su richiesta; l'alone è un filo più presente perché ora
+      è l'unico elemento. ── */
+html[data-hero-cursor-mode="glow"] .hero-cursor-dot { display: none; }
+html[data-hero-cursor-mode="glow"] .hero-cursor-trail {
+  width: 300px;
+  height: 300px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.22),
+    rgb(var(--hero-cursor-rgb, var(--brand-300)) / 0.09) 45%,
+    transparent 70%
+  );
+}
+
+/* ── Tema «lens»: lente d'ingrandimento — cerchio di vetro con manico.
+      Il JS la fa seguire con inerzia e la prensi (scale) su pulsanti e
+      link; il manico punta via dal centro dello schermo (ruoto il contenuto
+      con una variabile aggiornata dal componente, così resta credibile). ── */
+html[data-hero-cursor-mode="lens"] .hero-cursor-dot {
+  width: 52px;
+  height: 52px;
+  border-radius: 9999px;
+  background:
+    radial-gradient(
+      circle at 32% 28%,
+      rgb(255 255 255 / 0.5),
+      rgb(255 255 255 / 0.08) 42%,
+      transparent 60%
+    ),
+    radial-gradient(
+      circle,
+      rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.06),
+      transparent 70%
+    );
+  border: 1.5px solid rgb(var(--hero-cursor-rgb, var(--brand-600)) / 0.55);
+  box-shadow:
+    0 0 18px rgb(var(--hero-cursor-rgb, var(--brand-500)) / 0.18),
+    inset 0 0 12px rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.1);
+  transition: opacity 0.5s ease, box-shadow 0.25s ease;
+}
+/* Il manico: asta fissa in basso a destra, la posa classica della lente
+   d'ingrandimento — gira col cerchio e resta sempre leggibile. */
+html[data-hero-cursor-mode="lens"] .hero-cursor-dot::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - 1.75px);
+  top: 50%;
+  width: 3.5px;
+  height: 24px;
+  border-radius: 9999px;
+  background: rgb(var(--hero-cursor-rgb, var(--brand-600)) / 0.55);
+  /* Il manico punta via dal centro schermo: la variabile vive per lo JS
+     (angolo dal centro al puntatore); senza variabile resta il classico −45°. */
+  transform: rotate(var(--lens-handle-rot, -45deg)) translateY(28px);
+  transform-origin: 50% 0;
+}
+html[data-hero-cursor-mode="lens"] .hero-cursor-trail {
+  width: 130px;
+  height: 130px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.1),
+    transparent 70%
+  );
+}
+
+/* ── Tema «comet»: testina luminosa + corpo/scia che sfuma dietro. Il JS
+      ruota il corpo lungo la direzione di volo (atan2 smussato) e lo
+      allunga con la velocità: transform-origin sul lato della testina così
+      la scia «cresce» all'indietro. ── */
+html[data-hero-cursor-mode="comet"] .hero-cursor-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(255 255 255 / 0.98),
+    rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.75) 50%,
+    rgb(var(--hero-cursor-rgb, var(--brand-500)) / 0.2) 75%,
+    transparent 85%
+  );
+  box-shadow: 0 0 22px rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.45);
+}
+html[data-hero-cursor-mode="comet"] .hero-cursor-trail {
+  width: 320px;
+  height: 84px;
+  border-radius: 9999px;
+  transform-origin: 68% 50%;
+  background: radial-gradient(
+    52% 50% at 66% 50%,
+    rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.5),
+    rgb(var(--hero-cursor-rgb, var(--brand-300)) / 0.2) 45%,
+    rgb(var(--hero-cursor-rgb, var(--brand-300)) / 0.06) 65%,
+    transparent 80%
+  );
+  filter: blur(1px);
+}
+
+/* ── Tema «elastic»: punto che si stira nella direzione del movimento
+      (il JS fa rotate+scale), con un alone minuscolo a terra. ── */
+html[data-hero-cursor-mode="elastic"] .hero-cursor-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(var(--hero-cursor-rgb, var(--brand-500)) / 0.85),
+    rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.3) 60%,
+    transparent 75%
+  );
+}
+html[data-hero-cursor-mode="elastic"] .hero-cursor-trail {
+  width: 90px;
+  height: 90px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    rgb(var(--hero-cursor-rgb, var(--brand-400)) / 0.1),
+    transparent 70%
+  );
+}
+
+/* ── Aurora: bande di luce lentissime dietro il titolo (solo CSS).
+     sfere enormi e sfocate che respirano: background-position e opacity,
+      zero transform su contenitori con testo. ── */
+.hero-aurora {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hero-aurora::before,
+.hero-aurora::after {
+  content: "";
+  position: absolute;
+  inset: -20% -30%;
+  background:
+    radial-gradient(42% 55% at 22% 30%, rgb(var(--hero-accent, var(--brand-500)) / 0.16), transparent 70%),
+    radial-gradient(50% 60% at 78% 24%, rgb(var(--brand-300) / 0.2), transparent 72%),
+    radial-gradient(60% 55% at 50% 88%, rgb(var(--hero-accent, var(--brand-400)) / 0.12), transparent 74%);
+  background-size: 200% 200%;
+  animation: hero-aurora-drift 26s ease-in-out infinite alternate;
+}
+.hero-aurora::after {
+  background:
+    radial-gradient(38% 50% at 68% 60%, rgb(var(--brand-400) / 0.1), transparent 70%),
+    radial-gradient(46% 44% at 30% 70%, rgb(var(--brand-300) / 0.12), transparent 72%);
+  animation-duration: 34s;
+  animation-delay: -12s;
+  mix-blend-mode: screen;
+}
+@keyframes hero-aurora-drift {
+  0%   { background-position: 0% 0%, 100% 0%, 50% 100%; opacity: 0.75; }
+  50%  { opacity: 1; }
+  100% { background-position: 100% 60%, 0% 30%, 40% 0%; opacity: 0.8; }
+}
+
+/* ── Accessibilità: niente movimento se l'utente lo chiede ── */
+@media (prefers-reduced-motion: reduce) {
+  .hero-gradient-text { animation: none; }
+  .hero-animated[data-template="spotlight"] h1::after,
+  .hero-animated[data-template="aurora"] h1::after { animation: none; opacity: 0; }
+  .hero-lens-wrap::before { animation: none; opacity: 0.4; }
+  .hero-reflection-wrap::after { animation: none; opacity: 0.6; }
+  .hero-aurora::before,
+  .hero-aurora::after { animation: none; opacity: 0.6; }
+  /* Canvas (particles/parallax/dot-grid): il motore si ferma da solo a un
+     frame statico; qui solo il cursore sparisce del tutto. */
+  .hero-cursor-dot,
+  .hero-cursor-trail { display: none; }
+}
+
+/* ── Campi dell'editor hero (admin) ── */
+.hero-field {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.6);
+  background: rgb(255 255 255 / 0.7);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: rgb(var(--slate-900));
+  outline: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.hero-field:focus {
+  border-color: rgb(var(--brand-400) / 0.7);
+  background: rgb(255 255 255 / 0.85);
+}
+
+/* ── Flipbox della home («Come lavoriamo», stile Glossy) ──────────
+   Le stesse superfici glass di GlassCard, con lato retro che si scopre
+   al passaggio del mouse (hover) e al primo tap (focus-within):
+   solo transform/opacity → GPU, niente layout shift; su touch il
+   primo tap porta il focus e scopre il retro (niente hover fantasma).
+   Spente con prefers-reduced-motion: il retro si mostra senza girare.
+   Le facce vivono su piani Z separati (translateZ ±1px): coplanari,
+   il retro semi-trasparente «rispunta» sotto il fronte a 90° (z-fighting) */
+.flipbox { perspective: 1200px; }
+.flipbox-inner {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.flipbox:hover .flipbox-inner,
+.flipbox:focus-within .flipbox-inner { transform: rotateY(180deg); }
+.flipbox-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+/* Fronte leggermente AVANTI: durante la rotazione resta sopra il retro,
+   il traspare rispecchiato del fronte non si vede attraverso il retro. */
+.flipbox-face-front { transform: translateZ(1px); }
+.flipbox-face-back { position: absolute; inset: 0; transform: rotateY(180deg) translateZ(1px); }
+@media (prefers-reduced-motion: reduce) {
+  .flipbox-inner { transition: none; }
+}
+
+/* Scrollbar sottile — fine blocco hero animato */
+
+
+/* ── REVEAL IN SEQUENZA della home (solo CSS, ex framer-motion) ──
+   GEMELLO-PARI: sezione unificata nei due repo. Stesso ritmo di prima:
+   stagger 0.09s dal badge ai chip, chip in coda. La @keyframes `chip-in`
+   resta definita in globals.css (sezione barra di ricerca): qui si usa,
+   lì si definisce. */
+.hero-sequence .hero-step {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: hero-step-in 0.7s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+.hero-sequence .hero-step:nth-child(1) { animation-delay: 0.05s; }
+.hero-sequence .hero-step:nth-child(2) { animation-delay: 0.14s; }
+.hero-sequence .hero-step:nth-child(3) { animation-delay: 0.23s; }
+.hero-sequence .hero-step:nth-child(4) { animation-delay: 0.32s; }
+@keyframes hero-step-in {
+  to { opacity: 1; transform: none; }
+}
+.hero-sequence-chips .hero-chip {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  animation: chip-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+.hero-sequence-chips .hero-chip:nth-child(1) { animation-delay: 0.4s; }
+.hero-sequence-chips .hero-chip:nth-child(2) { animation-delay: 0.46s; }
+.hero-sequence-chips .hero-chip:nth-child(3) { animation-delay: 0.52s; }
+.hero-sequence-chips .hero-chip:nth-child(4) { animation-delay: 0.58s; }
+.hero-sequence-chips .hero-chip:nth-child(n + 5) { animation-delay: 0.64s; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-sequence .hero-step,
+  .hero-sequence-chips .hero-chip {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

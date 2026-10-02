@@ -1,0 +1,11 @@
+{
+  "name": "WebAgency Salento",
+  "short_name": "WebAgency Salento",
+  "icons": [
+    { "src": "/brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "theme_color": "#2F6BFF",
+  "background_color": "#F6F7F9",
+  "display": "standalone"
+}

@@ -1,0 +1,559 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ════════════════════════════════════════════════════════════════
+   MOTORE DI TEMI (PROMPT-TEMI-GRAFICI.md — Prompt 1)
+   Tutti i colori/superfici/raggi/ombre derivano da questi token CSS.
+   [data-theme="classic"] = resa attuale IDENTICA (default, valori
+   copiati dal CSS precedente). Il tema è applicato via <html
+   data-theme=...> dal root layout (zero flash). Cambiando i token via
+   DevTools l'intera UI (sito + admin) segue all'istante.
+   Nota: brand come TRIPLETTI rgb per far funzionare le opacità
+   Tailwind (bg-brand-600/90 → rgb(var(--brand-600) / 0.9)).
+   ════════════════════════════════════════════════════════════════ */
+:root,
+[data-theme="classic"] {
+  /* ══ Neutri (palette slate Tailwind, copiata identica) ══
+     In dark vengono scambiati dal blocco [data-mode="dark"]: TUTTE le
+     utility text-slate e bg-slate seguono il tema senza toccare i
+     componenti. --surface-white e --ink si scambiano di ruolo. */
+  --slate-50: 248 250 252;
+  --slate-100: 241 245 249;
+  --slate-200: 226 232 240;
+  --slate-300: 203 213 225;
+  --slate-400: 148 163 184;
+  --slate-500: 100 116 139;
+  --slate-600: 71 85 105;
+  --slate-700: 51 65 85;
+  --slate-800: 30 41 59;
+  --slate-900: 15 23 42;
+  --slate-950: 2 6 23;
+  --surface-white: 255 255 255;   /* base del vetro / superfici */
+  --ink: 15 23 42;                /* testo pieno (black in Tailwind) */
+  --accent: 148 184 248;          /* dettaglio interattivo personalizzabile */
+
+  /* Brand (scala blu attuale, copiata identica) */
+  --brand-50: 238 244 255;
+  --brand-100: 220 231 253;
+  --brand-200: 192 212 251;
+  --brand-300: 148 184 248;
+  --brand-400: 98 147 242;
+  --brand-500: 61 114 236;
+  --brand-600: 38 83 223;
+  --brand-700: 31 65 205;
+  --brand-800: 31 55 165;
+  --brand-900: 28 44 100;
+  --brand-950: 20 29 60;
+  /* SCURO: la scala brand non si tocca come token (i fondi brand-50 restano
+     chiari per i bollini su vetro). Gli step 400–600 vengono SCHIARITI via
+     override mirato solo quando sono COLORE DI FONDO di elementi che in
+     dark restano con testo bianco: il conteggio passi di Notion su
+     brand-600 dava 2,72:1 col testo bianco schiarito (slate-900→scuro). */
+
+  /* Superfici vetro (color-mix in srgb con white X%) — --surface-white
+     già dichiarato sopra coi neutri: è il DUPLICATO a rimuovere nel dark */
+  --surface-55: 55%;                  /* .glass bg */
+  --surface-65: 65%;                  /* .glass border + .glass-solid bg(78) border */
+  --surface-78: 78%;                  /* .glass-solid bg */
+  --surface-72: 72%;                  /* .glass-strong bg */
+  --surface-80: 80%;                  /* .glass-strong border */
+  --surface-75: 75%;                  /* inner light */
+  --surface-blur: 24px;               /* .glass blur */
+  --surface-blur-strong: 32px;        /* .glass-strong blur */
+  --surface-saturate: 1.4;
+  --surface-saturate-strong: 1.5;
+
+  color-scheme: light;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DARK MODE — terzo blocco di override ([data-theme] × [data-mode]).
+   Principio: la dark NON è un terzo tema ma una DIMENSIONE dei due
+   temi esistenti. Override di soli token: neutri slate invertiti,
+   superfici scure, aurora notturna, ombre profonde, bordi chiari. I
+   brand restano quelli del tema attivo ma con la scala AGGIUSTATA per
+   lo scuro (themeVars lato server, funzione pura adjustScaleForDark):
+   la leggibilità dei bottoni/link non si improvvisa qui. Le semantiche
+   verde/ambra/rosso di stato NON si toccano.
+   ════════════════════════════════════════════════════════════════ */
+html[data-mode="dark"] {
+  /* Slate invertito: 50↔950 con curva più dolce per il testo secondario */
+  --slate-50: 15 23 42;
+  --slate-100: 22 31 51;
+  --slate-200: 30 41 59;
+  --slate-300: 44 56 78;
+  --slate-400: 129 145 165;   /* 3.8:1 → 5.1:1 su superficie 82%: nav e meta leggibili */
+  --slate-500: 160 175 195;   /* testo secondario: 6.5:1 su scuro */
+  --slate-600: 176 190 207;
+  --slate-700: 203 213 225;
+  --slate-800: 226 232 240;
+  --slate-900: 241 245 249;
+  --slate-950: 248 250 252;
+  --surface-white: 15 21 34;      /* superfici: blu-nero profondo */
+  --ink: 241 245 249;             /* testo pieno chiaro */
+
+  /* Superfici vetro scure: le percentuali restano, cambia la base */
+  --surface-55: 72%;
+  --surface-65: 78%;
+  --surface-78: 88%;
+  --surface-72: 82%;
+  --surface-80: 92%;
+  --surface-75: 90%;
+
+  /* Aurora notturna: stessi angoli, luce brand ridotta, fondo profondo */
+  --aurora-1: 61 114 236;
+  --aurora-2: 148 184 248;
+  --aurora-3: 38 55 96;
+  --aurora-4-a: 10 15 28;
+  --aurora-4-b: 13 19 36;
+
+  /* Ombre profonde, bordo-luce quasi spento */
+  --shadow-glass: 0 8px 32px -12px rgb(0 0 0 / 0.55), inset 0 1px 0 rgb(255 255 255 / 0.08);
+  --shadow-glass-hover: 0 16px 48px -16px rgb(0 0 0 / 0.65), inset 0 1px 0 rgb(255 255 255 / 0.1);
+  --shadow-glass-btn: 0 8px 24px -8px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  --shadow-drop: 0 8px 32px -12px rgb(0 0 0 / 0.55);
+
+  color-scheme: dark;
+}
+
+/* Bordo-luce dei vetrini: su scuro il bordo-bianco diventa bordo-chiaro tenue */
+html[data-mode="dark"] .glass,
+html[data-mode="dark"] .glass-solid,
+html[data-mode="dark"] .glass-strong {
+  border-color: rgb(var(--slate-300) / 0.28);
+}
+
+/* In dark l'alone della search bar si intensifica appena */
+html[data-mode="dark"] .search-glow::before {
+  filter: blur(12px);
+}
+
+/* Bolle chat in dark (Prompt 5): le superfici chiare esplicite (bg-white /
+   bg-brand-50) non passano dai token slate/surface, quindi in scuro restate
+   quasi bianche col testo chiaro = illeggibili. Le mappo sulle superfici
+   scure del tema: cliente = card scura, agente = vetro brand profondo. */
+html[data-mode="dark"] .bubble-visitor {
+  background: rgb(var(--surface-white) / 0.92);
+  color: rgb(var(--ink));
+  --tw-ring-color: rgb(var(--slate-300) / 0.28);
+}
+html[data-mode="dark"] .bubble-operator {
+  background: rgb(var(--brand-900) / 0.55);
+  color: rgb(var(--ink)); /* in dark la scala slate è invertita: il testo chiaro è --ink/slate-800 */
+  --tw-ring-color: rgb(var(--brand-500) / 0.45);
+}
+
+/* Brand come COLORE TESTO su scuro: i toni 600–900 della scala chiara sono
+   troppo scuri su fondo scuro (il walker li beccava su #id e link). Li
+   schiarisco solo quando il brand è foreground, non per i fondi. */
+html[data-mode="dark"] .text-brand-50,
+html[data-mode="dark"] .text-brand-100,
+html[data-mode="dark"] .text-brand-200,
+html[data-mode="dark"] .text-brand-300,
+html[data-mode="dark"] .text-brand-400,
+html[data-mode="dark"] .text-brand-500,
+html[data-mode="dark"] .text-brand-600,
+html[data-mode="dark"] .text-brand-700,
+html[data-mode="dark"] .text-brand-800,
+html[data-mode="dark"] .text-brand-900 {
+  color: rgb(var(--brand-300));
+}
+html[data-mode="dark"] .text-brand-950 {
+  color: rgb(var(--brand-200));
+}
+
+:root,
+[data-theme="classic"] {
+  /* Fondo aurora (4 gradient stop) */
+  --aurora-1: 61 114 236;   /* aloni radiale blu */
+  --aurora-2: 148 184 248;  /* aloni radiale chiaro */
+  --aurora-3: 220 231 253;  /* aloni radiale molto chiaro */
+  --aurora-4-a: 246 249 255; /* linear top */
+  --aurora-4-b: 238 244 255; /* linear bottom */
+
+  /* Raggi */
+  --radius-card: 24px;      /* rounded-3xl */
+  --radius-pill: 9999px;
+  --radius-btn: 9999px;
+  --radius-input: 16px;
+
+  /* Ombre (glow/btn usano il brand: seguono il tema) */
+  --shadow-glass: 0 8px 32px -12px rgb(15 23 42 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-glass-hover: 0 16px 48px -16px rgb(15 23 42 / 0.28), inset 0 1px 0 rgb(255 255 255 / 0.7);
+  --shadow-glow: 0 0 0 1px rgb(var(--brand-500) / 0.25), 0 8px 40px -12px rgb(var(--brand-800) / 0.45);
+  --shadow-glass-btn: 0 8px 24px -8px rgb(var(--brand-800) / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.35);
+  --shadow-drop: 0 8px 32px -12px rgb(15 23 42 / 0.18);
+
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+::selection {
+  background: rgb(var(--brand-100));
+}
+
+/* Badge di stato su fondo brand (contatori «n/4 collegati», «Server
+   collegato»): in DARK la coppia brand-50/brand-700 resta chiara-su-chiara
+   (1,82:1 — il testo-brand viene schiarito, il fondo no). Il badge scambia
+   i ruoli: fondo brand profondo traslucido, testo brand-200 chiaro.
+   !important: il blocco html[data-mode] .text-brand-* schiarisce OGNI
+   utility text-brand-* con specificità (0,2,1) — qui serve vincere. */
+html[data-mode="dark"] .glass-badge-brand {
+  background: rgb(var(--brand-900) / 0.55);
+  color: rgb(var(--brand-200)) !important;
+  border-color: rgb(var(--brand-500) / 0.35);
+  --tw-ring-color: rgb(var(--brand-500) / 0.35);
+}
+
+/* GlassBadge: il colore testo è in CSS (non utility Tailwind) così non
+   contende con text-brand-700 del chiamante. Light: slate-700; dark:
+   slate-200 (il bordo-bianco su superficie scura sparisce, il testo scuro
+   con esso). */
+.glass-badge {
+  color: rgb(var(--slate-700));
+}
+/* Mirror del testo secondario: slate-700 light ↔ slate-800 dark (nella
+   scala dark gli slate bassi sono scuri: slate-200 qui dava testo navy su
+   vetro navy — 1,19:1 sul badge hero delle pagine pubbliche). */
+html[data-mode="dark"] .glass-badge {
+  color: rgb(var(--slate-800));
+}
+
+/* Pill di stato su fondo brand chiaro (bg-brand-50/90 + text-brand-700,
+   es. «In conversazione» nelle ticket): in dark valgono le stesse regole
+   del badge contatore — fondo brand profondo, testo brand-200 chiaro
+   (prima: 1,83:1, illeggibile). */
+html[data-mode="dark"] [class*="bg-brand-50"][class*="text-brand-700"] {
+  background: rgb(var(--brand-900) / 0.55);
+  color: rgb(var(--brand-200));
+  --tw-ring-color: rgb(var(--brand-500) / 0.35);
+}
+
+/* Contatore pill su vetro bianco esplicito (bg-white/65 + text-slate-600,
+   es. «14 aperti» nell'header Inbox): in dark il fondo bianco trasparente
+   su superficie scura rende il testo scuro invisibile (3:1). Le utility
+   slate seguono già il tema — qui basta scambiare fondo/bordo. */
+html[data-mode="dark"] [class*="bg-white/65"][class*="text-slate-600"] {
+  background: rgb(var(--slate-200) / 0.12);
+  --tw-ring-color: rgb(var(--slate-300) / 0.28);
+}
+
+/* Cerchietti numerati su fondo brand-600 (passi guida, es. Notion): in
+   dark il testo bianco diventa slate-900 (quasi nero su blu pieno = 2,7:1).
+   Il bianco su brand-600 schiarito (adjustScaleForDark non tocca i token
+   CSS di default) resta la via giusta: qui si riafferma il bianco pieno. */
+html[data-mode="dark"] .step-dot {
+  color: #ffffff;
+  background: rgb(var(--brand-500) / 0.95);
+}
+
+/* CTA su fondo brand: `white` è mappato su --surface-white (blu-nero) per
+   i vetri, quindi text-white su bg-brand-600 diventava nero-su-blu in dark
+   (2,94:1 — bottoni «Cerca», «Parla col team», «Chiama ora» illeggibili).
+   Qui il testo PRINT sui fondi brand usa --on-brand (calcolato in themeVars:
+   bianco se passa AA sul brand-600 attivo, quasi-nero altrimenti — con un
+   primario chiaro scelto dall'utente la scala dark schiarisce 600 e il
+   bianco crollava a 1,56:1). Fallback #ffffff = comportamento col tema di
+   default (blu), che passa sempre. */
+html[data-mode="dark"] button[class*="bg-brand-"].text-white,
+html[data-mode="dark"] a[class*="bg-brand-"].text-white,
+html[data-mode="dark"] .step-dot,
+html[data-mode="dark"] button[class*="bg-brand-"] > .text-white {
+  color: rgb(var(--on-brand, 255 255 255));
+}
+html[data-mode="light"] button[class*="bg-brand-"].text-white,
+html[data-mode="light"] a[class*="bg-brand-"].text-white,
+html[data-mode="light"] .step-dot,
+html[data-mode="light"] button[class*="bg-brand-"] > .text-white {
+  color: rgb(var(--on-brand, 255 255 255));
+}
+
+/* Placeholder AA: copre anche i form che non usano GlassInput. Le classi
+   placeholder:text-slate-500 esplicite restano la fonte locale equivalente. */
+input::placeholder,
+textarea::placeholder {
+  /* alpha 0.9→1: a 0.9 la misurazione reale dava 4,49:1, appena sotto
+     AA (testo slate-500 su vetro bianco). Pieno = ~4,9:1. */
+  color: rgb(var(--slate-500));
+}
+
+/* Accento applicato ai link che già dichiarano un hover brand: il picker
+   resta compatibile con tutte le utility esistenti, senza riscrivere le pagine. */
+a[class*="hover:text-brand-"]:hover,
+a[class*="hover:border-brand-"]:hover {
+  color: rgb(var(--accent));
+}
+
+/* Dettaglio hover dei CTA nei due temi: la superficie resta primaria, mentre
+   il ring accentuato rende visibile la personalizzazione senza compromettere
+   il contrasto del testo bianco. */
+button[class*="bg-brand-"]:hover,
+a[class*="bg-brand-"]:hover {
+  box-shadow: 0 0 0 2px rgb(var(--accent) / 0.3), var(--shadow-glass-btn);
+}
+
+/* Nasconde la X di pulizia dell'input search su WebKit */
+input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TEMA «ZENDESK GLOSSY» (PROMPT-TEMI-GRAFICI.md — Prompt 2)
+   Direzione Zendesk Garden (fondi piatti bianchi, bordi netti, testo
+   kale, raggi piccoli, ombre quasi assenti) + tocco Glossy Apple:
+   - bordo-luce interno sulle card (inset 0 1px 0 white/60);
+   - bottone primario con leggerissimo highlight gloss (shadow-glass-btn);
+   - hover lift soft (le utility hover:-translate-y-0.5 esistenti);
+   - un alone brand tenuissimo (7%) agli angoli del fondo.
+   Override SOLO di token: nessun cambio strutturale a componenti/pagine.
+   Le semantiche verde/ambra/rosso di stato NON si toccano (leggibilità).
+   ════════════════════════════════════════════════════════════════ */
+[data-theme="zendesk"] {
+  /* Brand Garden: primary #1f73b7 (contrasto 5.1:1 su bianco) */
+  --brand-50: 240 247 251;
+  --brand-100: 219 236 245;
+  --brand-200: 184 219 238;
+  --brand-300: 137 196 226;
+  --brand-400: 72 166 208;
+  --brand-500: 31 115 183;
+  --brand-600: 24 96 154;
+  --brand-700: 20 79 128;
+  --brand-800: 17 63 103;
+  --brand-900: 13 44 74;
+  --brand-950: 8 27 47;
+
+  /* Superfici PIATTE opache (il vetro diventa bianco pieno) */
+  --surface-white: 255 255 255;
+  --accent: 72 166 208;           /* default Garden */
+  --surface-55: 100%;
+  --surface-65: 100%;
+  --surface-78: 100%;
+  --surface-72: 100%;
+  --surface-80: 100%;
+  --surface-75: 100%;
+  --surface-blur: 0px;
+  --surface-blur-strong: 0px;
+  --surface-saturate: 1;
+  --surface-saturate-strong: 1;
+
+  /* Fondo app grigio-chiaro Garden con alone brand 7% (il tocco glossy) */
+  --aurora-1: 31 115 183;
+  --aurora-2: 31 115 183;
+  --aurora-3: 216 220 222;
+  --aurora-4-a: 248 249 249;
+  --aurora-4-b: 248 249 249;
+
+  /* Raggi piccoli: card 10px, bottoni 8px (pill resta pill) */
+  --radius-card: 10px;
+  --radius-pill: 4px;
+  --radius-btn: 8px;
+  --radius-input: 8px;
+
+  /* Ombre quasi assenti: il bordo fa il lavoro (Garden), più il luce Glossy */
+  --shadow-glass: 0 0 0 1px rgb(216 220 222 / 0.9), 0 1px 2px rgb(63 76 84 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-glass-hover: 0 0 0 1px rgb(184 192 197 / 0.9), 0 2px 6px rgb(63 76 84 / 0.12), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  --shadow-glow: 0 0 0 1px rgb(31 115 183 / 0.3), 0 2px 10px -2px rgb(31 115 183 / 0.3);
+  --shadow-glass-btn: 0 1px 2px rgb(15 40 60 / 0.25), inset 0 1px 0 rgb(255 255 255 / 0.25);
+  --shadow-drop: 0 1px 2px rgb(63 76 84 / 0.08);
+
+  color-scheme: light;
+}
+
+/* Testo Garden: kale scuro su superfici piatte (body usa text-slate-900:
+   qui lo raffreddiamo verso kale senza toccare le classi). */
+[data-theme="zendesk"] body {
+  color: #2f3941;
+}
+
+/* Superfici: bordo netto Garden al posto della trasparenza del bordo-bianco */
+[data-theme="zendesk"] .glass,
+[data-theme="zendesk"] .glass-solid,
+[data-theme="zendesk"] .glass-strong {
+  border-color: #d8dcde;
+}
+
+/* Header sticky della vista ticket: leggero backdrop-blur (tocco glossy,
+   8-12px) invece del piatto totale — solo su zendesk. */
+[data-theme="zendesk"] .glass-strong {
+  backdrop-filter: blur(10px) saturate(1);
+  -webkit-backdrop-filter: blur(10px) saturate(1);
+}
+
+/* ── Liquid Glass (stile Apple) — ogni valore via token ──
+   ⚠️ CONTAINING BLOCK: ogni elemento con backdrop-filter (come le classi
+   qui sotto) diventa containing block dei DISCENDENTI position:fixed —
+   un overlay «fixed inset-0» montato dentro una superficie glass si
+   dimensiona su quella superficie, non sul viewport (bug palette ⌘K,
+   2026-09). Gli overlay modali partono con createPortal su document.body:
+   prima di aggiungere un overlay fixed, controllare la catena degli
+   antenati (anche filter e transform creano lo stesso containing block). */
+.glass {
+  background: rgb(var(--surface-white) / var(--surface-55));
+  backdrop-filter: blur(var(--surface-blur)) saturate(var(--surface-saturate));
+  -webkit-backdrop-filter: blur(var(--surface-blur)) saturate(var(--surface-saturate));
+  border: 1px solid rgb(var(--surface-white) / var(--surface-65));
+  box-shadow:
+    var(--shadow-drop),
+    inset 0 1px 0 rgb(var(--surface-white) / var(--surface-75));
+}
+
+/* Le card-link (a.glass-solid) sono blocchi: senza, un wrapper intermedio
+   (es. RevealItem) le lascia inline e il background si spezza per righe. */
+a.glass-solid {
+  display: block;
+}
+
+/* Vetro "solido" per card dentro contenitori animati (Reveal/RevealGroup):
+   backdrop-filter sotto antenati con transform produce artefatti di rendering
+   in Chromium (fondo campionato nella regione sbagliata). Su fondo aurora
+   già pastello il resa è quasi identica, senza il bug. */
+.glass-solid {
+  background: rgb(var(--surface-white) / var(--surface-78));
+  border: 1px solid rgb(var(--surface-white) / var(--surface-65));
+  box-shadow:
+    var(--shadow-drop),
+    inset 0 1px 0 rgb(var(--surface-white) / var(--surface-75));
+}
+
+.glass-strong {
+  background: rgb(var(--surface-white) / var(--surface-72));
+  backdrop-filter: blur(var(--surface-blur-strong)) saturate(var(--surface-saturate-strong));
+  -webkit-backdrop-filter: blur(var(--surface-blur-strong)) saturate(var(--surface-saturate-strong));
+  border: 1px solid rgb(var(--surface-white) / var(--surface-80));
+}
+
+/* Ticket «attende risposta»: bordo+alone arancio. Specificità doppia per
+   vincere sul border/box-shadow di .glass-solid (che altrimenti copre le
+   utility Tailwind con la stessa specificità). */
+.glass-solid.ticket-waiting {
+  border-color: rgb(253 186 116 / 0.95);
+  box-shadow:
+    0 0 0 3px rgb(253 186 116 / 0.3),
+    0 8px 32px -12px rgb(15 23 42 / 0.18),
+    inset 0 1px 0 rgb(255 255 255 / 0.75);
+}
+
+/* Fondo aurora per le superfici admin — colori parametrici via token */
+.aurora {
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgb(var(--aurora-1) / 0.16), transparent 60%),
+    radial-gradient(1000px 500px at 90% 0%, rgb(var(--aurora-2) / 0.2), transparent 55%),
+    radial-gradient(900px 700px at 50% 110%, rgb(var(--aurora-3) / 0.5), transparent 60%),
+    linear-gradient(180deg, rgb(var(--aurora-4-a)) 0%, rgb(var(--aurora-4-b)) 100%);
+}
+
+/* ── Aurora viva: due aloni che derivano lentamente (solo transform = GPU).
+      Il parallax da mouse/scroll è aggiunto da <AuroraLayers /> ── */
+.aurora-layer-a {
+  background: radial-gradient(640px 420px at 30% 28%, rgb(var(--aurora-1) / 0.1), transparent 70%);
+  animation: aurora-a 26s ease-in-out infinite alternate;
+}
+.aurora-layer-b {
+  background: radial-gradient(720px 520px at 72% 62%, rgb(var(--aurora-2) / 0.16), transparent 70%);
+  animation: aurora-b 34s ease-in-out infinite alternate;
+}
+@keyframes aurora-a {
+  from { translate: -0.4% -0.2%; }
+  to   { translate: 0.5% 0.4%; scale: 1.06; }
+}
+@keyframes aurora-b {
+  from { translate: 0.3% 0.2%; scale: 1.05; }
+  to   { translate: -0.5% -0.3%; }
+}
+
+/* ── Accessibilità: niente movimento se l'utente lo chiede ── */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-layer-a,
+  .aurora-layer-b {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ── Glow dinamico della barra di ricerca (durante la digitazione) ── */
+.search-glow {
+  position: relative;
+}
+.search-glow::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  background: radial-gradient(60% 100% at 50% 50%, rgb(var(--brand-500) / 0.35), transparent 70%);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(10px);
+}
+.search-glow.is-typing::before {
+  opacity: 1;
+  animation: glow-pulse 1.6s ease-in-out infinite;
+}
+.search-glow.is-focused::before {
+  opacity: 0.5;
+}
+/* Invito all'azione: alone che respira lentamente finché non si interagisce */
+.search-glow.is-beckoning::before {
+  opacity: 1;
+  animation: glow-pulse 2.6s ease-in-out infinite;
+}
+/* Sveglia gentile: la barra si scuote lateralmente come un oggetto che chiede
+   di essere usato. Resta SEMPRE visibile e torna al centro a ogni ciclo. */
+.search-glow.is-beckoning {
+  animation: bar-wake 2.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) 0.4s infinite;
+}
+@keyframes bar-wake {
+  0%, 46%, 100% { transform: translateX(0); }
+  8%  { transform: translateX(-7px); }
+  16% { transform: translateX(7px); }
+  24% { transform: translateX(-5px); }
+  32% { transform: translateX(5px); }
+  40% { transform: translateX(-2px); }
+}
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50%      { opacity: 0.8;  transform: scale(1.02); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-glow::before { transition: none; }
+  .search-glow.is-typing::before { animation: none; opacity: 0.5; }
+  .search-glow.is-beckoning { animation: none; }
+  .search-glow.is-beckoning::before { animation: none; opacity: 0.5; }
+}
+
+/* ── View Transitions (navigazione tra pagine, stile iOS) ──
+      Il nuovo contenuto entra come un foglio: sale da 12px sotto con
+      una curva dolce e un leggero scale; il vecchio sfuma indietro. */
+::view-transition-old(page) {
+  animation: vt-out 0.32s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+::view-transition-new(page) {
+  animation: vt-in 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes vt-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-6px) scale(0.995); }
+}
+@keyframes vt-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.998); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Niente transizioni se l'utente le ha disattivate */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+

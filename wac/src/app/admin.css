@@ -1,0 +1,101 @@
+/* ── WpEditor (stile WordPress) ───────────────────────────────────────
+   Contenuto del contentEditable: i blocchi dell'email formattata hanno
+   lo stesso respiro tipografico del resto dell'admin. */
+.wp-editor p { margin: 0 0 0.5em; }
+.wp-editor p:last-child { margin-bottom: 0; }
+.wp-editor ul,
+.wp-editor ol { margin: 0 0 0.5em 1.25em; padding: 0; }
+.wp-editor ul { list-style: disc; }
+.wp-editor ol { list-style: decimal; }
+.wp-editor li { margin: 0.125em 0; }
+.wp-editor blockquote {
+  border-left: 3px solid rgb(203 213 225);
+  margin: 0.25em 0 0.5em;
+  padding-left: 12px;
+  color: rgb(71 85 105);
+}
+.wp-editor pre {
+  background: rgb(248 250 252);
+  border: 1px solid rgb(226 232 240);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.9em;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+.wp-editor a { color: rgb(38 83 223); text-decoration: underline; }
+.wp-editor code {
+  background: rgb(241 245 249);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.wp-editor:empty::before,
+.wp-editor.wp-editor-empty::before {
+  content: attr(data-placeholder);
+  color: rgb(100 116 139);
+  pointer-events: none;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MICRO-INTERAZIONI TICKETING (Prompt 6) — la UI risponde a ogni
+   azione ma senza distrarre: cap 400ms, ease-out coerente, tutto
+   disattivato sotto prefers-reduced-motion.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Nuovo messaggio in chat: entra con fade+rise 150ms (cap 400) */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.msg-in { animation: msg-in 150ms ease-out both; }
+
+/* Badge «Attende risposta»: pop morbido quando compare */
+@keyframes pop-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  60%  { transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.pop-in { animation: pop-in 200ms ease-out both; }
+
+/* Badge SLA «In ritardo»/«Scaduto»: puntino che pulsa (attenzione) */
+.sla-late-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: sla-dot 1.6s ease-in-out infinite;
+}
+@keyframes sla-dot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+
+/* Pills di stato/priorità: un singolo pulse verde/ambra al successo.
+   La classe .flash-success viene applicata temporaneamente dai componenti. */
+@keyframes pill-flash {
+  0%   { box-shadow: 0 0 0 0 rgb(16 185 129 / 0.5); }
+  100% { box-shadow: 0 0 0 8px rgb(16 185 129 / 0); }
+}
+.pill-flash-success { animation: pill-flash 400ms ease-out 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-in,
+  .pop-in,
+  .pill-flash-success { animation: none; }
+  .sla-late-dot { animation: none; }
+}
+
+/* Scrollbar sottile per i pannelli scrollabili della inbox ticket */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.5) transparent;
+}
+.scroll-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.5);
+  border-radius: 9999px;
+}
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
+

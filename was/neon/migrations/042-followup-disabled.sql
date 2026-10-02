@@ -1,0 +1,33 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- 042 FOLLOW-UP DISABLED — il singolo ticket può escludersi dal
+-- follow-up automatico di Ambrosio.
+-- ═══════════════════════════════════════════════════════════════════
+--
+-- Contesto: il follow-up del cron è UNICO per dedup (followup_sent_at):
+-- cancellare l'impronta per "disattivare" RIARMEREBBE il cron. La
+-- disattivazione manuale (pannello Ambrosio, conferma + audit
+-- ambrosio.desk.followup_off) ha quindi bisogno di un FLAG esplicito:
+-- il cron deve smettere di vedere il ticket come candidabile.
+--
+-- Perché una colonna e non l'audit: la regola d'attribuzione del
+-- takeover (041) LEGGE la storia; questa DECIDE il futuro — una query
+-- `not exists` sull'audit non basta: serve una condizione di filtro
+-- O(1) nella select dei candidati e nel claim. L'impronta resta
+-- comunque la verità ufficiale: audit_log non si può riscrivere.
+--
+-- Semantica (stessa impronta del take-over, speculare):
+--   null                  → nessuna scelta manuale, il cron decide
+--                           secondo la sua dedup (followup_sent_at);
+--   set (not null)        → l'operatore ha ESCLUSO il ticket: il cron
+--                           non lo seleziona e il claim lo rifiuta,
+--                           anche se followup_sent_at fosse null;
+--   riportato a null      → l'operatore riattiva: il follow-up torna
+--                           possibile secondo la dedup standard
+--                           (l'impronta followup_sent_at non è mai
+--                           stata toccata: nessun riarmo occulto).
+--
+-- Additiva e idempotente: la colonna nasce NULL (nessun cambio di
+-- comportamento per i ticket esistenti).
+
+alter table conversations
+  add column if not exists followup_disabled_at timestamptz;
