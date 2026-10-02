@@ -1,0 +1,109 @@
+{
+  "fase": "s-maxage-idle-90s",
+  "quando": "02/10/26, 10:17",
+  "generato": "2026-10-02T08:17:26.626Z",
+  "campioni": 1,
+  "attesaSec": 90,
+  "misuratoDa": "192.168.1.7",
+  "cookiePresente": false,
+  "siti": [
+    {
+      "key": "crema",
+      "label": "WebAgencyCrema",
+      "base": "https://www.webagencycrema.com",
+      "pagine": [
+        {
+          "path": "/",
+          "n": 1,
+          "min": 1315,
+          "mediana": 1315,
+          "max": 1315,
+          "media": 1315,
+          "funzione": "iad1",
+          "cache": "HIT",
+          "campioni": [
+            {
+              "ttfbMs": 1315,
+              "totalMs": 1321,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::iad1::jhlgg-1790929046790-ca8464c268e0",
+              "versoLogin": false,
+              "at": "2026-10-02T08:17:27.949Z"
+            }
+          ]
+        },
+        {
+          "path": "/seo-crema",
+          "n": 1,
+          "min": 215,
+          "mediana": 215,
+          "max": 215,
+          "media": 215,
+          "funzione": "iad1",
+          "cache": "HIT",
+          "campioni": [
+            {
+              "ttfbMs": 215,
+              "totalMs": 217,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::iad1::4t9fm-1790929048229-1353f58ebcce",
+              "versoLogin": false,
+              "at": "2026-10-02T08:17:28.417Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "salento",
+      "label": "Web Agency Salento",
+      "base": "https://www.webagencysalento.com",
+      "pagine": [
+        {
+          "path": "/",
+          "n": 1,
+          "min": 484,
+          "mediana": 484,
+          "max": 484,
+          "media": 484,
+          "funzione": "fra1",
+          "cache": "STALE",
+          "campioni": [
+            {
+              "ttfbMs": 484,
+              "totalMs": 486,
+              "status": 200,
+              "cache": "STALE",
+              "vercelId": "fra1::fra1::mtjsl-1790929048809-01e590ebd4b2",
+              "versoLogin": false,
+              "at": "2026-10-02T08:17:29.154Z"
+            }
+          ]
+        },
+        {
+          "path": "/seo-salento",
+          "n": 1,
+          "min": 76,
+          "mediana": 76,
+          "max": 76,
+          "media": 76,
+          "funzione": "fra1",
+          "cache": "STALE",
+          "campioni": [
+            {
+              "ttfbMs": 76,
+              "totalMs": 77,
+              "status": 200,
+              "cache": "STALE",
+              "vercelId": "fra1::fra1::ffzln-1790929049436-f0eccbfa1100",
+              "versoLogin": false,
+              "at": "2026-10-02T08:17:29.483Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

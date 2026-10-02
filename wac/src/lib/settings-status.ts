@@ -225,6 +225,23 @@ export function telegramStatus(cfg: {
   };
 }
 
+/**
+ * Canali social: collegati = almeno un account Facebook, Instagram
+ * Business o LinkedIn autorizzato via OAuth (la vista `channel_accounts`
+ * dei tre canali). Zero account → «Da collegare»: l'azione è il
+ * «Collega» della scheda dedicata, a un click dalla card.
+ */
+export function socialStatus(accounts: number): HubCardStatus {
+  const n = Math.max(0, Number(accounts) || 0);
+  return {
+    key: "social",
+    ok: n > 0,
+    warn: n === 0,
+    label: n === 0 ? "Da collegare" : n === 1 ? "1 collegato" : `${n} collegati`,
+    counts: [],
+  };
+}
+
 /** Email: collegata solo con host, utente e password salvati (SMTP completo). */
 export function emailStatus(cfg: {
   smtpHost?: string | null;

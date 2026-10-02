@@ -8,7 +8,7 @@
  * da riga di comando, nessun conflitto.
  *
  * Uso (è il webServer di playwright.config.ts):
- *   WAC_DIST_DIR=.next-e2e PORT=3100 node scripts/e2e-dev-server.mjs
+ *   WAC_DIST_DIR=.next-e2e PORT=3110 node scripts/e2e-dev-server.mjs
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";

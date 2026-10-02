@@ -1,4 +1,4 @@
-import { BarChart3, CalendarClock, FolderSync, NotebookPen, type LucideIcon } from "lucide-react";
+import { BarChart3, CalendarClock, CalendarDays, Cloud, FolderSync, NotebookPen, type LucideIcon } from "lucide-react";
 
 /**
  * REGISTRO DELLE INTEGRAZIONI — defs pure (niente DB, niente "use server"):
@@ -40,12 +40,12 @@ export const INTEGRATION_DEFS: IntegrationDef[] = [
   },
   {
     key: "google",
-    href: "/admin/tools/google",
+    href: "/admin/settings/google",
     label: "Google growth kit",
     Icon: BarChart3,
     tone: "bg-white/70 text-blue-600",
-    text: "GA4, Tag Manager, Search Console e PageSpeed collegati al sito: misura, SEO e performance.",
-    keywords: "google ga4 analytics tag manager search console pagespeed integrazione",
+    text: "Le quattro skill Google in una pagina: recensioni, Analytics 4, Workspace e SEO (Search Console, PageSpeed, CrUX), più la configurazione dei tag.",
+    keywords: "google ga4 analytics tag manager search console pagespeed recensioni reviews workspace crux integrazione",
   },
   {
     key: "drive",
@@ -55,6 +55,24 @@ export const INTEGRATION_DEFS: IntegrationDef[] = [
     tone: "bg-white/70 text-emerald-600",
     text: "Cartella Drive condivisa via account di servizio: qui finiranno foto, documenti e pratiche cliente.",
     keywords: "google drive cartella file foto documenti upload service account integrazione",
+  },
+  {
+    key: "onedrive",
+    href: "/admin/settings/onedrive",
+    label: "OneDrive",
+    Icon: Cloud,
+    tone: "bg-white/70 text-sky-600",
+    text: "Libreria documenti Microsoft via Graph API (app Entra ID): qui finiranno foto, documenti e pratiche cliente.",
+    keywords: "microsoft onedrive sharepoint graph file documenti upload azure app integrazione",
+  },
+  {
+    key: "ical",
+    href: "/admin/calendario",
+    label: "iCal",
+    Icon: CalendarDays,
+    tone: "bg-white/70 text-violet-600",
+    text: "Sorgenti iCal (calendari esterni del team) in pull e feed .ics in abbonamento: un solo tempo dell'agenzia.",
+    keywords: "ical icalendar feed calendario sorgenti import sync sincronizzazione abbonamento integrazione",
   },
 ];
 

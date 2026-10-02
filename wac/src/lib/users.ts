@@ -62,7 +62,13 @@ function toUser(r: Record<string, unknown>): AppUser {
   };
 }
 
-/** L'utente corrente con ruolo e dati anagrafici (null se non autenticato). */
+/**
+ * L'utente corrente con ruolo e dati anagrafici (null se non autenticato).
+ * L'IDENTITÀ arriva dal loader memoizzato della richiesta (ADR-005 in
+ * lib/admin): la riga `select *` qui resta una sola per richiesta, perché
+ * il secondo getAdminUser dentro questa funzione deduplica col primo del
+ * layout — prima ogni pagina /admin paginava l'auth 3-4 volte su Neon.
+ */
 export async function getAppUser() {
   const identity = await getAdminUser();
   if (!identity) return null;

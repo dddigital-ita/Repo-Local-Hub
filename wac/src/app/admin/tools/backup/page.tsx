@@ -6,6 +6,9 @@ import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { listBackups, currentVersion, installedNextVersion, getBackupReminderDays } from "@/lib/maintenance";
 import BackupPanel from "@/components/backup-panel";
+import UpdatesDomainPanel from "@/components/updates-domain-panel";
+import { listReleaseLabels, listSnapshots, leggiImportPending } from "@/lib/domain-snapshots";
+import { DOMINI } from "@/lib/domain-snapshots-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +23,11 @@ export default async function BackupToolPage({
     version_test?: string;
     restore_error?: string;
     restore_done?: string;
+    updates_msg?: string;
   }>;
 }) {
   await requireAdmin();
-  const { backup_test, backup_download, version_test, restore_error, restore_done } = await searchParams;
+  const { backup_test, backup_download, version_test, restore_error, restore_done, updates_msg } = await searchParams;
   const pool = db();
   const dbOk = Boolean(pool);
   const backups = dbOk ? await listBackups() : [];
@@ -63,6 +67,18 @@ export default async function BackupToolPage({
           downloadId={backup_download}
           restoreError={restore_error}
           restoreDone={restore_done}
+        />
+      </Card>
+
+      <Card>
+        <UpdatesDomainPanel
+          dbOk={dbOk}
+          updatesMessage={updates_msg}
+          pending={dbOk ? await leggiImportPending() : null}
+          release={dbOk ? await listReleaseLabels() : []}
+          storici={Object.fromEntries(
+            await Promise.all(DOMINI.map(async (d) => [d.id, dbOk ? await listSnapshots(d.id) : []])),
+          )}
         />
       </Card>
     </div>

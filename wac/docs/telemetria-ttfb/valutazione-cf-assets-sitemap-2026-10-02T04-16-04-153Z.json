@@ -1,0 +1,382 @@
+{
+  "fase": "valutazione-cf-assets-sitemap",
+  "generato": "2026-10-02T04:16:04.153Z",
+  "misuratoDa": "192.168.1.7",
+  "siti": [
+    {
+      "key": "crema",
+      "label": "WebAgencyCrema",
+      "base": "https://www.webagencycrema.com",
+      "urlPubblici": 13,
+      "htmlTotaleByte": 800931,
+      "assetUniciTotali": 22,
+      "assetPerTipo": {
+        "media": 4,
+        "css": 3,
+        "chunks": 15
+      },
+      "perPagina": [
+        {
+          "url": "",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/agenzia-web-crema",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/creazione-siti-web-crema",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-ecommerce-crema",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/seo-crema",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/posizionamento-google-crema",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/restyling-sito-web-crema",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/consulente-digitale-crema",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/preventivo-sito-web-crema",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-cremona",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-lodi",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/privacy-policy",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/cookie-policy",
+          "status": 200,
+          "nAsset": 21
+        }
+      ],
+      "unione": [
+        {
+          "url": "/_next/static/media/22a5144ee8d83bca-s.p.woff2",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/media/4c9affa5bc8f420e-s.p.woff2",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/media/e4af272ccee01ff0-s.p.woff2",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/media/eaead17c7dbfcd5d-s.p.woff2",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/css/7c92785e7fe793c8.css",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/css/68cc26d37bf65aef.css",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/css/1f55f1b5987fa733.css",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/webpack-7381efbe0aaa618b.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/4bd1b696-0562a75e9b1eb3c3.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/3794-e7f5565941eebed7.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/main-app-0ea6bcb40afac604.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/8500-e4dd1cb1bb626827.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/7411-201220a67fb72fec.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/8931-c8fd9c0173cc51a2.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/7107-0a20cf733c3c4177.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/app/layout-07f09238d9ce6110.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/7524-a22b08fa7dbd87c6.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/6354-fe40836b58b40043.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/app/page-5b6f592eee0792b7.js",
+          "nPagine": 3
+        },
+        {
+          "url": "/_next/static/chunks/polyfills-42372ed130431b0a.js",
+          "nPagine": 13
+        },
+        {
+          "url": "/_next/static/chunks/app/%5Bslug%5D/page-1adbb21fae739196.js",
+          "nPagine": 10
+        },
+        {
+          "url": "/_next/static/chunks/app/cookie-policy/page-26100ddd259847f3.js",
+          "nPagine": 1
+        }
+      ]
+    },
+    {
+      "key": "salento",
+      "label": "Web Agency Salento",
+      "base": "https://www.webagencysalento.com",
+      "urlPubblici": 20,
+      "htmlTotaleByte": 1283281,
+      "assetUniciTotali": 22,
+      "assetPerTipo": {
+        "media": 4,
+        "css": 3,
+        "chunks": 15
+      },
+      "perPagina": [
+        {
+          "url": "",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/web-agency-salento",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/web-agency-lecce",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/realizzazione-siti-web-lecce",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-gallipoli",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-otranto",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-nardo",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/seo-salento",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/preventivo-sito-web",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/ecommerce-lecce-salento",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/posizionamento-google-salento",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/restyling-sito-web-salento",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/consulente-digitale-lecce",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-hotel-bb-salento",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-brindisi",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-maglie",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-copertino",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/siti-web-ristoranti-salento",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/privacy-policy",
+          "status": 200,
+          "nAsset": 20
+        },
+        {
+          "url": "/cookie-policy",
+          "status": 200,
+          "nAsset": 21
+        }
+      ],
+      "unione": [
+        {
+          "url": "/_next/static/media/22a5144ee8d83bca-s.p.woff2",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/media/4c9affa5bc8f420e-s.p.woff2",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/media/e4af272ccee01ff0-s.p.woff2",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/media/eaead17c7dbfcd5d-s.p.woff2",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/css/7c92785e7fe793c8.css",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/css/58b9e2199395fdb5.css",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/css/839dcd6f14ecb8b9.css",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/webpack-7381efbe0aaa618b.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/4bd1b696-0562a75e9b1eb3c3.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/3794-e7f5565941eebed7.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/main-app-dbe42c91161794d9.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/8500-e4dd1cb1bb626827.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/7411-201220a67fb72fec.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/8931-c8fd9c0173cc51a2.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/7107-11af349dccbad968.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/app/layout-a7ccf5c2bc342596.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/7524-9670c8025e5ae6cd.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/6354-fe40836b58b40043.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/app/page-5b6f592eee0792b7.js",
+          "nPagine": 3
+        },
+        {
+          "url": "/_next/static/chunks/polyfills-42372ed130431b0a.js",
+          "nPagine": 20
+        },
+        {
+          "url": "/_next/static/chunks/app/%5Bslug%5D/page-1adbb21fae739196.js",
+          "nPagine": 17
+        },
+        {
+          "url": "/_next/static/chunks/app/cookie-policy/page-7834b10946cf7f15.js",
+          "nPagine": 1
+        }
+      ]
+    }
+  ]
+}

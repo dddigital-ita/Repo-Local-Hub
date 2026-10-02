@@ -15,6 +15,13 @@ export async function GET() {
   const config = await readMaintenanceConfig();
   return NextResponse.json(
     { [MAINTENANCE_KEY]: config },
-    { headers: { "cache-control": "no-store" } },
+    {
+      headers: {
+        // La cache condivisa evita una query Neon per ogni istanza proxy.
+        // ponytail: toggle manutenzione può richiedere fino a 10 minuti; usare invalidazione CDN se servirà immediatezza.
+        "cache-control": "public, max-age=0, must-revalidate",
+        "vercel-cdn-cache-control": "max-age=600",
+      },
+    },
   );
 }

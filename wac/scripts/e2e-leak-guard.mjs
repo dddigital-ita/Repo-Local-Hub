@@ -19,6 +19,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import pg from "pg";
+import { rilasciaLock } from "./e2e-lock.mjs";
 
 // Stessa ricetta degli spec: DATABASE_URL da .env.e2e (DB disposable wac_e2e,
 // mai il dev diurno né il produzione). Override con E2E_DATABASE_URL.
@@ -54,6 +55,20 @@ const CONTROLLI = [
     spec: "leads-admin, callbacks-admin (lead del callback)",
   },
   {
+    // Controllo PORTATO dal repo gemello «Web Agency Salento + Installer»
+    // (evoluzione indipendente del loro leak-guard, segnalataci dalla
+    // lettera E2E-PORTA-3100-README.md): anche le schede cliente vanno
+    // guardate. Da noi i marker sono gli stessi degli spec (email
+    // @e2e-clients.test) PIÙ il telefono fisso dei clienti WhatsApp del
+    // sync (le schede nate dal canale WA non hanno email: escono SOLO per
+    // telefono — cascade su client_conversations/client_meta).
+    tabella: "clients",
+    sql: `select count(*)::int as n from clients where email_norm like '%@e2e-clients.test' or phone_e164 in ('+39020000501', '+39020000502')`,
+    marker: "email_norm like '%@e2e-clients.test' or phone_e164 in ('+39020000501', '+39020000502')",
+    pulizia: `delete from clients where email_norm like '%@e2e-clients.test' or phone_e164 in ('+39020000501', '+39020000502') -- cascade su client_conversations/client_meta`,
+    spec: "clients-tipo (portafoglio: schede seedate E nate dal sync, senza email — escono per telefono)",
+  },
+  {
     tabella: "callbacks",
     sql: `select count(*)::int as n from callbacks where notes = 'e2e-cb-mark'`,
     marker: "notes = 'e2e-cb-mark'",
@@ -84,6 +99,13 @@ const CONTROLLI = [
 ];
 
 export async function runLeakGuard() {
+  // Il rilascio del lock va in ogni caso: anche quando il leak-guard
+  // fallisce la porta/DB devono restare liberi per la run successiva.
+  try {
+    rilasciaLock();
+  } catch (e) {
+    console.warn(`⚠ e2e-lock: rilascio non riuscito (${e.message}) — il self-healing lo curerà.`);
+  }
   const client = new pg.Client({ connectionString: dsn() });
   let results;
   try {

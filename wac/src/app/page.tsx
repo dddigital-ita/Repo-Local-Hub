@@ -19,8 +19,7 @@ import {
 } from "lucide-react";
 import JsonLd from "@/components/json-ld";
 import SearchBar from "@/components/search-bar";
-import HeroAnimated from "@/components/hero-animated";
-import HeroCursorGlow from "@/components/hero-cursor-glow";
+import HeroAbGate from "@/components/hero-ab-gate";
 import { GlassBadge, GlassCard } from "@/components/glass";
 import { Container, LinkButton } from "@/components/ui";
 import { LANDINGS, site, contacts } from "@/lib/site";
@@ -28,11 +27,6 @@ import { Reveal, RevealGroup, RevealItem } from "@/components/motion";
 import { teamCards } from "@/lib/operators";
 import { listPackages } from "@/lib/packages";
 import { getHeroConfig } from "@/lib/hero";
-import { heroVars } from "@/lib/hero-shared";
-import { abDecision } from "@/lib/ab-shared";
-import { cohortFromCookieHeader } from "@/lib/ab-cohort";
-import { headers } from "next/headers";
-import AbViewTracker from "@/components/ab-view-tracker";
 
 // I pacchetti attivi sono editabili da /admin/packages: la home si rigenera da sola (ISR 5 min).
 export const revalidate = 300;
@@ -106,29 +100,17 @@ export default async function HomePage() {
   // coorte, cookie first-party): metà statico, metà animato, e ogni
   // search_start porta la dimensione hero_variant per il confronto GA4.
   const heroRaw = await getHeroConfig();
-  const cookieHeader = (await headers()).get("cookie");
-  const cohort = cohortFromCookieHeader(cookieHeader);
-  const { variant, showAnimated } = abDecision(heroRaw, cohort);
-  const heroOn = showAnimated;
-  const heroStyle = heroVars(heroRaw) as React.CSSProperties;
   const hero = { ...heroRaw };
   return (
     <main>
-      {/* Impression A/B: detta dall'altra faccia del test (chi NON ha questo
-          rendering) per un confronto GA4 con pari impression per variante. */}
-      <AbViewTracker variant={variant === "animated" ? "control" : "animated"} template={heroRaw.template} />
-      {/* Scia del mouse: vive solo mentre l'hero è a schermo (data-hero).
-          Tema e colore arrivano dall'admin (tools → hero → «Cursore»);
-          con «Nessuno» il puntatore resta quello standard, senza portale. */}
-      {heroOn && hero.cursor !== "none" && (
-        <HeroCursorGlow cursor={hero.cursor} cursorAccent={hero.cursorAccent} />
-      )}
-      {/* Hero stile motore di ricerca */}
-      {heroOn ? (
-        <section style={heroStyle} data-gradient-dir={hero.gradient}>
-          <HeroAnimated config={hero} variant={variant} />
-        </section>
-      ) : (
+      {/* Il cancellò A/B decide nel browser (cookie first-party
+          wac_ab): senza headers() di richiesta la home resta ISR —
+          prerenderizzata e servita dalla cache CDN, non renderizzata
+          per ogni visitatore. L'hero statico qui dentro è il markup
+          server del gate (coorte vuota, zero bundle aggiuntivo); la
+          variante A/B per search_start → GA4 arriva dal contesto
+          HeroVariantContext. */}
+      <HeroAbGate config={hero}>
       <section className="relative overflow-hidden">
         <div
           aria-hidden
@@ -156,7 +138,7 @@ export default async function HomePage() {
             </RevealItem>
             <RevealItem>
               <div className="mt-10 w-full max-w-3xl">
-                <SearchBar autoFocus heroVariant={variant} />
+                <SearchBar autoFocus />
               </div>
             </RevealItem>
             <RevealItem>
@@ -189,7 +171,7 @@ export default async function HomePage() {
           </RevealGroup>
         </Container>
       </section>
-      )}
+      </HeroAbGate>
 
       {/* Come funziona */}
       <section className="py-16 sm:py-20">

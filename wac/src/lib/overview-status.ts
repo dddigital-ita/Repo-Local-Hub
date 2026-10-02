@@ -88,19 +88,18 @@ const SETTINGS_HREFS: Record<string, string> = {
   cloudflare: "/admin/settings/cloudflare",
   "lead-followup": "/admin/settings/lead-followup",
   notion: "/admin/notion",
-  google: "/admin/tools/google",
+  google: "/admin/settings/google",
   drive: "/admin/settings/drive",
 };
-// Le integrazioni contano sia nella riga Impostazioni (che mostra la
-// sezione Integrazioni completa) sia — per Google e Notion — nella riga
-// Tools: è lo stesso comportamento degli hub, ognuno riporta le schede
-// che espone. I link di ogni riga sono univoci (pendingHrefs).
+// Le integrazioni contano nella riga Impostazioni (che mostra la
+// sezione Integrazioni completa); Notion compare anche nella riga
+// Tools perché l'hub Tools la espone ancora tra le pagine di sistema.
+// I link di ogni riga sono univoci (pendingHrefs).
 
 const TOOLS_HREFS: Record<string, string> = {
   tema: "/admin/tools/theme",
   hero: "/admin/tools/hero",
   backup: "/admin/tools/backup",
-  google: "/admin/tools/google",
   notion: "/admin/notion",
 };
 
@@ -133,7 +132,7 @@ export async function getOverviewConfig(): Promise<ConfigRow[]> {
     hubRow(
       "Tools",
       "/admin/tools",
-      [tools.theme, tools.hero, tools.backup, asHubStatus(tools.google), asHubStatus(tools.notion)],
+      [tools.theme, tools.hero, tools.backup, asHubStatus(tools.notion)],
       TOOLS_HREFS,
     ),
     hubRow(

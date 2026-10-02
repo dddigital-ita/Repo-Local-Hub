@@ -35,6 +35,7 @@ const ACTION_LABEL: Record<string, string> = {
   "callback.richiama-ora": "Richiama subito",
   "ai.impostazioni": "Impostazioni Ambrosio",
   "admin.login": "Login admin",
+  "admin.render": "Tempo di rendering pagina",
   "admin.password-cambiata": "Password admin cambiata",
   "ai.reset-prompt": "Reset prompt Ambrosio",
   "notion.impostazioni": "Impostazioni Notion",

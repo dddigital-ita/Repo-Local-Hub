@@ -1,9 +1,10 @@
 import {
   Activity,
-  BarChart3,
+  AtSign,
   BookOpen,
   Briefcase,
   CalendarClock,
+  CalendarDays,
   Construction,
   FileSearch,
   FileText,
@@ -19,6 +20,7 @@ import {
   Package,
   Palette,
   PhoneCall,
+  RefreshCw,
   ScrollText,
   Settings2,
   ShieldCheck,
@@ -33,6 +35,7 @@ import {
   Users,
   Wrench,
   type LucideIcon,
+  Rocket,
 } from "lucide-react";
 import { integrationDestinations } from "@/lib/integrations-registry";
 
@@ -82,19 +85,22 @@ export const ADMIN_DESTINATIONS: AdminDestination[] = [
   { href: "/admin/settings/chiusura-automatica", label: "Chiusura automatica", Icon: TimerReset, group: "Impostazioni", keywords: "autoclose cron ticket silenzio giorni" },
   { href: "/admin/settings/email", label: "Posta elettronica", Icon: Mail, group: "Impostazioni", keywords: "email smtp imap posta casella sincronizzazione canale" },
   { href: "/admin/settings/whatsapp", label: "WhatsApp Business", Icon: MessageCircle, group: "Impostazioni", keywords: "whatsapp meta cloud webhook predisposizione canale" },
+  { href: "/admin/settings/social", label: "Canali social", Icon: AtSign, group: "Impostazioni", keywords: "facebook instagram linkedin meta oauth social canali token app secret" },
   { href: "/admin/settings/cloudflare", label: "Cloudflare (Turnstile)", Icon: Globe, group: "Impostazioni", keywords: "cloudflare turnstile captcha invisibile bot anti-bot chiavi site secret protezione" },
   { href: "/admin/settings/lead-followup", label: "Follow-up lead", Icon: Timer, group: "Impostazioni", keywords: "followup ambrosio lead spariti ricordo ore" },
 
   // ── Tools + Sistema ──────────────────────────────────────────────
   { href: "/admin/profilo", label: "Area personale", Icon: UserCircle, group: "Sistema", keywords: "profilo area personale account dati anagrafici partita iva telefono indirizzo nome cognome" },
   { href: "/admin/utenti", label: "Utenti", Icon: UserCog, group: "Sistema", keywords: "utenti account team ruoli super admin permessi crea disattiva reset password" },
+  { href: "/admin/calendario", label: "Calendario del team", Icon: CalendarDays, group: "Tools", keywords: "calendario appuntamenti callback agenda setimana slot google icalcaldav impegni turni disponibilita" },
   { href: "/admin/tools", label: "Tools", Icon: Wrench, group: "Tools", keywords: "strumenti hub schede" },
   { href: "/admin/tools/theme", label: "Tema grafico", Icon: Palette, group: "Tools", keywords: "tema palette colori dark light aspetto brand" },
   { href: "/admin/tools/hero", label: "Hero animato", Icon: Sparkles, group: "Tools", keywords: "hero apertura home animazione template scia mouse barra ricerca testi" },
   { href: "/admin/tools/backup", label: "Backup e aggiornamenti", Icon: CalendarClock, group: "Tools", keywords: "export json ripristino versione next storico" },
   { href: "/admin/tools/manutenzione", label: "Modalità manutenzione", Icon: Construction, group: "Tools", keywords: "manutenzione manutenzione sito chiusura 503 pagina sostitutiva offline works in progress sos chiuso temporaneo" },
-  { href: "/admin/tools/google", label: "Google growth kit", Icon: BarChart3, group: "Tools", keywords: "ga4 tag manager search console pagespeed analytics" },
+  { href: "/admin/tools/cache", label: "Free cache", Icon: RefreshCw, group: "Tools", keywords: "free cache svuota purga revalidate invalida velocita performance fresco aggiornato home landing" },
   { href: "/admin/tools/manuale", label: "Manuale Operativo", Icon: GraduationCap, group: "Tools", keywords: "manuale operativo formazione guida manual istruzioni come si usa aiuto tutorial" },
+  { href: "/admin/tools/golive", label: "Runbook go-live", Icon: Rocket, group: "Tools", keywords: "runbook go live golive checklist temporizzata deploy online cpanel vercel neon avvio lancio metto online" },
   { href: "/admin/seo", label: "SEO", Icon: FileSearch, group: "Sistema", keywords: "meta landing redirect search console query" },
   { href: "/admin/shield", label: "Shield", Icon: ShieldCheck, group: "Sistema", keywords: "rate limiting ban sicurezza ip eventi" },
   { href: "/admin/audit", label: "Audit", Icon: ScrollText, group: "Sistema", keywords: "log registro azioni chi ha fatto cosa append-only" },

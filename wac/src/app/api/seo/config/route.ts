@@ -18,6 +18,12 @@ export async function GET() {
         Object.entries(config.landings).map(([k, v]) => [k, { slugOverride: v.slugOverride }]),
       ),
     },
-    { headers: { "cache-control": "no-store" } },
+    {
+      headers: {
+        // Config pubblica e rara: cache CDN, browser sempre aggiornato.
+        "cache-control": "public, max-age=0, must-revalidate",
+        "vercel-cdn-cache-control": "max-age=3600",
+      },
+    },
   );
 }

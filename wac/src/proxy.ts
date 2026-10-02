@@ -7,6 +7,12 @@ import {
   sanitizeMaintenanceConfig,
   type MaintenanceConfig,
 } from "@/lib/maintenance-shared";
+import {
+  DEFAULT_PAGE_CACHE,
+  PAGE_CACHE_KEY,
+  sanitizePageCacheConfig,
+  type PageCacheConfig,
+} from "@/lib/page-cache-shared";
 import { contacts, site } from "@/lib/site";
 
 /**
@@ -19,10 +25,14 @@ import { contacts, site } from "@/lib/site";
  * 2. REDIRECT 301 configurati da admin (content_settings `seo_config` → redirects).
  * 3. Vecchi slug delle landing rinominate: chi segue un backlink o la vecchia
  *    sitemap non trova un 404 ma il nuovo URL (301 → niente perdita SEO).
+ * 4. TTL CACHE PAGINE PUBBLICHE: home e landing canoniche ricevono
+ *    `s-maxage` dalla config admin (content_settings `page_cache_ttl`):
+ *    lo slider su /admin/tools/perf cambia la freschezza della CDN
+ *    senza redeploy. Il browser rivalida SEMPRE (max-age=0).
  *
  * Il proxy NON può né usare `pg` né importare moduli che lo fanno
  * (lib/seo.ts → lib/db.ts): la config la legge via rotta interna
- * /api/seo/config e /api/maintenance/config (cache in-process 60s; in
+ * /api/seo/config e /api/maintenance/config (cache in-process + CDN; in
  * caso di errore → nessun blocco, nessun redirect: il sito funziona
  * degradato APERTO come da convenzione — la manutenzione si accende
  * volontariamente, non per incidente).
@@ -34,11 +44,27 @@ type Snapshot = {
   maintenance: MaintenanceConfig;
 };
 
-const MAINTENANCE_TTL_MS = 15_000; // il toggle admin diventa pubblico entro ~15s
+const MAINTENANCE_TTL_MS = 15_000; // cache locale; CDN della rotta può ritardare il toggle fino a 10 min
 const SEO_TTL_MS = 60_000;
+const PAGE_CACHE_TTL_MS = 30_000; // la rotta config ha CDN a 60s: qui si tiene il cambio TTL breve
 
 let seoCache: { data: Snapshot["redirects"]; slugMap: Snapshot["slugMap"]; at: number } | null = null;
 let maintenanceCache: { data: MaintenanceConfig; at: number } | null = null;
+let pageCacheCache: { data: PageCacheConfig; at: number } | null = null;
+
+/**
+ * Svuota le cache in-process del proxy (manutenzione, redirect
+ * SEO, TTL pagine). La chiama la purga di Free cache: le
+ * revalidate di Next coprono i tag della ISR ma non la cache
+ * che il middleware tiene in memoria. Modello del gemello
+ * Salento (Free cache 0.7.0), portata qui il 2026-10-02: il
+ * proxy è superficie condivisa.
+ */
+export function purgeProxyCaches(): void {
+  seoCache = null;
+  maintenanceCache = null;
+  pageCacheCache = null;
+}
 
 /** Manutenzione: rotta dedicata, cache BREVE (accendere/spegnere deve
  *  arrivare in pubblico quasi subito; un fallimento qui NON blocca mai). */
@@ -86,6 +112,28 @@ async function loadSeo(request: NextRequest): Promise<Pick<Snapshot, "redirects"
     // API non raggiungibile: nessun redirect.
   }
   return { redirects: [], slugMap: {} };
+}
+
+/** TTL cache pagine: rotta dedicata, cache in-process breve
+ *  (lo slider deve arrivare in pubblico in fretta). Errore →
+ *  default: la cache non può spegnersi per un problema DB. */
+async function loadPageCache(request: NextRequest): Promise<PageCacheConfig> {
+  if (pageCacheCache && Date.now() - pageCacheCache.at < PAGE_CACHE_TTL_MS) {
+    return pageCacheCache.data;
+  }
+  try {
+    const url = new URL("/api/page-cache/config", request.nextUrl.origin);
+    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(1500) });
+    if (res.ok) {
+      const data = (await res.json()) as Record<string, unknown>;
+      const parsed = sanitizePageCacheConfig(data[PAGE_CACHE_KEY]);
+      pageCacheCache = { data: parsed, at: Date.now() };
+      return parsed;
+    }
+  } catch {
+    // API non raggiungibile (avvio a freddo, DB assente): TTL default.
+  }
+  return { ...DEFAULT_PAGE_CACHE };
 }
 
 /** Escape HTML minimo per i testi dell'agenzia (attributi e nodi testo). */
@@ -238,6 +286,23 @@ export async function proxy(request: NextRequest) {
       url.pathname = `/${target}`;
       return NextResponse.redirect(url, 301);
     }
+  }
+
+  // 3) TTL cache pagine pubbliche: home e landing CANONICHE
+  //    (gli slug vecchi sono già usciti col 301 sopra). Il
+  //    browser rivalida sempre: la freschezza cede solo alla
+    //    CDN, mai al visitatore. Altri path: header invariati
+    //    (pagine statiche noindex, 404: non si cachano).
+  const cacheable = lower === "/" || LANDINGS.some((l) => `/${l.slug}` === lower);
+  if (cacheable) {
+    const ttl = (await loadPageCache(request)).ttlSeconds;
+    const res = NextResponse.next();
+    res.headers.set(
+      "cache-control",
+      `public, max-age=0, must-revalidate, s-maxage=${ttl}`,
+    );
+    res.headers.set("vercel-cdn-cache-control", `max-age=${ttl}`);
+    return res;
   }
 
   return NextResponse.next();

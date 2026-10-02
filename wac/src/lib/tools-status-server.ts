@@ -1,4 +1,6 @@
 import { db } from "@/lib/db";
+import { cache } from "react";
+import { readThroughDbConfig } from "@/lib/db-config-cache";
 import { getSiteTheme } from "@/lib/theme";
 import { getHeroConfig } from "@/lib/hero";
 import { heroStatus } from "@/lib/hero-shared";
@@ -9,9 +11,11 @@ import type { IntegrationStatus } from "@/lib/integrations-status";
 
 /**
  * STATO DELL'HUB TOOLS (server-only): carica i dati grezzi e delega ogni
- * decisione alle funzioni pure di `tools-status.ts`. Le schede Google e
- * Notion riusano gli STESSI reader del registro integrazioni
- * (`getIntegrationStatus`) — una sola fonte di verità per quei servizi.
+ * decisione alle funzioni pure di `tools-status.ts`. La scheda Notion
+ * riusa gli STESSI reader del registro integrazioni
+ * (`getIntegrationStatus`) — una sola fonte di verità per quel servizio.
+ * (Il Google growth kit vive in Impostazioni › Integrazioni: il suo
+ * stato lo legge solo il layer delle integrazioni.)
  * Ogni lettura degredisce da sola: mai un 500 dell'hub.
  */
 
@@ -20,7 +24,6 @@ export type ToolsStatuses = {
   hero: HubCardStatus;
   backup: HubCardStatus;
   /** Stato dal registro (def inclusa): null se la def non esiste più. */
-  google: IntegrationStatus | null;
   notion: IntegrationStatus | null;
 };
 
@@ -45,17 +48,21 @@ async function readBackupStatus(): Promise<HubCardStatus> {
   }
 }
 
-export async function getToolsStatuses(): Promise<ToolsStatuses> {
-  const [theme, hero, backup, google, notion] = await Promise.all([
-    getSiteTheme()
+/** Memoizzato per richiesta (cache() di React, ADR-005): la Panoramica compone
+ *  questo layer insieme a Impostazioni e Integrazioni nella STESSA richiesta —
+ *  senza dedup tema/hero/backup/integrazioni sarebbero letti il doppio. Le
+ *  config di tema e hero passano dal TTL condiviso (60s, ADR-005 esteso:
+ *  cambiano solo a salvataggio; l'età del backup resta letta dal DB — è
+ *  operationale, non configurazione). */
+export const getToolsStatuses = cache(async (): Promise<ToolsStatuses> => {
+  const [theme, hero, backup, notion] = await Promise.all([
+    readThroughDbConfig("site_theme", getSiteTheme)
       .then((t) => themeStatus(t))
       .catch(() => themeStatus(null)),
-    getHeroConfig()
+    readThroughDbConfig("hero_config", getHeroConfig)
       .then((h) => heroStatus(h))
       .catch(() => heroStatus(null)),
     readBackupStatus(),
-    getIntegrationStatus("google").catch(() => null),
     getIntegrationStatus("notion").catch(() => null),
-  ]);
-  return { theme, hero, backup, google, notion };
-}
+  ]);    return { theme, hero, backup, notion };
+});

@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Building2, Coins, Mail, MessageCircle, Phone, RefreshCw, Search, Sparkles, Ticket, Users, X } from "lucide-react";
+import { Building2, Coins, Download, Mail, MessageCircle, Phone, RefreshCw, Search, Sparkles, Ticket, TrendingUp, Users, X } from "lucide-react";
 
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
-import { countClients, listClients, channelLabel, sumPortfolioBudget } from "@/lib/clients";
+import { countClients, listClients, channelLabel, sumPortfolioBudget, clientTypeLabel } from "@/lib/clients";
+import { CLIENT_TYPES, CLIENT_TYPE_LABELS, clientTypePure } from "@/lib/clients-shared";
 import { GlassButton, GlassNotice } from "@/components/glass";
-import { syncClientsAction } from "@/app/admin/actions";
+import { syncClientsAction, salvaDittaAction, rigettaDittaAction } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,21 +26,38 @@ const WA_RE = /^[+0-9]+$/;
 export default async function ClientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; sync?: string; aperti?: string; ordina?: string }>;
+  searchParams: Promise<{ q?: string; sync?: string; aperti?: string; ordina?: string; tipo?: string; "senza-ditta"?: string }>;
 }) {
   await requireAdmin();
-  const { q, sync, aperti, ordina } = await searchParams;
+  const { q, sync, aperti, ordina, tipo: tipoParam, "senza-ditta": senzaDittaParam } = await searchParams;
   const byBudget = ordina === "budget";
   const openOnly = aperti === "1";
+  // Filtro tipo: SOLO valori del contratto condiviso (o «nessuno» per le
+  // schede da classificare) — un ?tipo= manomesso degrada a «tutti».
+  const tipo = tipoParam === "nessuno" ? "nessuno" : clientTypePure(tipoParam);
+  // Segmento di qualità dati: aziende senza ragione sociale (038). Quando
+  // attivo è lui il filtro (implica tipo=azienda, vedi listClients).
+  const senzaDitta = senzaDittaParam === "1";
   const pool = db();
   if (!pool)
     return <p className="text-sm text-red-600">Database non configurato (vedi SETUP.md → Neon).</p>;
 
   const [clients, counts, portfolio] = await Promise.all([
-    listClients(q, 200, openOnly, byBudget ? "budget" : undefined),
+    listClients(q, 200, openOnly, byBudget ? "budget" : undefined, tipo ?? undefined, senzaDitta),
     countClients(),
     sumPortfolioBudget(),
   ]);
+
+  // Export CSV segmentato: STESSI filtri della vista corrente — quello che
+  // vedi è quello che esporta (il file dice il segmento nel nome).
+  const csvParams = new URLSearchParams();
+  if (q) csvParams.set("q", q);
+  if (openOnly) csvParams.set("aperti", "1");
+  if (byBudget) csvParams.set("ordina", "budget");
+  if (tipo) csvParams.set("tipo", tipo);
+  if (senzaDitta) csvParams.set("senza-ditta", "1");
+  const csvQuery = csvParams.toString();
+  const csvHref = `/api/admin/clients.csv${csvQuery ? `?${csvQuery}` : ""}`;
 
   const KPIS = [
     { label: "Clienti", value: counts.total, Icon: Users, tint: "bg-brand-600/90" },
@@ -76,11 +94,29 @@ export default async function ClientsPage({
             automaticamente, tu resti con le azioni da fare.
           </p>
         </div>
-        <form action={syncClientsAction}>
-          <GlassButton type="submit" variant="primary" size="sm">
-            <RefreshCw className="h-4 w-4" aria-hidden /> Sincronizza ora
-          </GlassButton>
-        </form>
+        <div className="flex items-center gap-2">
+          <a
+            href={csvHref}
+            download
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-white/60 px-3.5 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-white/60 transition hover:bg-white/90"
+          >
+            <Download className="h-3.5 w-3.5" aria-hidden />
+            Esporta CSV
+          </a>
+          <a
+            href="/api/admin/clients.csv?agg=tipo-mese"
+            download
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-white/60 px-3.5 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-white/60 transition hover:bg-white/90"
+          >
+            <TrendingUp className="h-3.5 w-3.5" aria-hidden />
+            Portafoglio nel tempo
+          </a>
+          <form action={syncClientsAction}>
+            <GlassButton type="submit" variant="primary" size="sm">
+              <RefreshCw className="h-4 w-4" aria-hidden /> Sincronizza ora
+            </GlassButton>
+          </form>
+        </div>
       </header>
 
       {sync && <GlassNotice tone={sync.startsWith("Ambrosio") ? "success" : "info"}>{sync}</GlassNotice>}
@@ -115,7 +151,7 @@ export default async function ClientsPage({
 
       {/* Filtro «solo con ticket aperti»: il cribbio del portafoglio — chi
           ha lavoro in corso ora. Link-graffetta come le tab della inbox. */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Link
           href={openOnly ? "/admin/clients" : "/admin/clients?aperti=1"}
           aria-pressed={openOnly}
@@ -128,9 +164,20 @@ export default async function ClientsPage({
           <Ticket className="h-3.5 w-3.5" aria-hidden />
           Solo con ticket aperti
         </Link>
-        {(openOnly || q) && (
+        {(openOnly || q || senzaDitta) && (
           <span className="text-xs text-slate-500">
             {clients.length} {clients.length === 1 ? "risultato" : "risultati"}
+          </span>
+        )}
+        {/* Onestà sul troncamento: la lista ha limit 200. Il KPI «Clienti»
+            conta TUTTO (count(*)): se il totale supera il limite, i due numeri
+            non tornano e l utente deve saperlo — gli stessi dati si esportano
+            COMPLETI via CSV/Notion. Solo su lista non filtrata: con ?q o
+            ?aperti=1 il conteggio è dei risultati, il troncamento globale
+            non è pertinente (niente allarmi falsi). */}
+        {counts.total > clients.length && !q && !openOnly && (
+          <span className="text-xs font-medium text-amber-700">
+            mostrati i primi {clients.length} su {counts.total}
           </span>
         )}
         {/* Ordina per budget dichiarato: la lettura commerciale del
@@ -147,6 +194,55 @@ export default async function ClientsPage({
           <Coins className="h-3.5 w-3.5" aria-hidden />
           Budget: più alto prima
         </Link>
+
+        {/* Filtro tipo cliente (038): chips coi conteggi — il dato che dice
+            se vale la pena cliccare. «Da classificare» = NULL, la coda delle
+            schede che un umano deve ancora guardare. Query string come le
+            altre (aperti/ordina), niente stato client. */}
+        <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:inline-block" aria-hidden />
+        <Link
+          href={tipo ? "/admin/clients" : "/admin/clients?tipo=nessuno"}
+          aria-pressed={tipo === "nessuno"}
+          className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold ring-1 transition ${
+            tipo === "nessuno"
+              ? "bg-slate-900/90 text-white ring-slate-900/20"
+              : "bg-white/50 text-slate-600 ring-white/60 hover:bg-white/80"
+          }`}
+        >
+          Da classificare
+          <span className="tabular-nums opacity-70">{counts.byType.nessuno ?? 0}</span>
+        </Link>
+        {/* Segmento qualità «aziende senza ditta»: il conto delle schede
+            da completare, con lo stesso gesto degli altri filtri. */}
+        {counts.aziendeSenzaDitta > 0 && (
+          <Link
+            href={senzaDitta ? "/admin/clients" : "/admin/clients?senza-ditta=1"}
+            aria-pressed={senzaDitta}
+            className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold ring-1 transition ${
+              senzaDitta
+                ? "bg-amber-500/90 text-white shadow-glass-btn"
+                : "bg-white/50 text-slate-600 ring-white/60 hover:bg-white/80"
+            }`}
+          >
+            Aziende senza ditta
+            <span className="tabular-nums opacity-70">{counts.aziendeSenzaDitta}</span>
+          </Link>
+        )}
+        {CLIENT_TYPES.map((t) => (
+          <Link
+            key={t}
+            href={tipo === t ? "/admin/clients" : `/admin/clients?tipo=${t}`}
+            aria-pressed={tipo === t}
+            className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold ring-1 transition ${
+              tipo === t
+                ? "bg-brand-600/90 text-white shadow-glass-btn"
+                : "bg-white/50 text-slate-600 ring-white/60 hover:bg-white/80"
+            }`}
+          >
+            {CLIENT_TYPE_LABELS[t]}
+            <span className="tabular-nums opacity-70">{counts.byType[t] ?? 0}</span>
+          </Link>
+        ))}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -187,6 +283,15 @@ export default async function ClientsPage({
                       {c.company_name}
                     </span>
                   )}
+                  <span
+                    className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${
+                      c.client_type
+                        ? "bg-violet-50/90 text-violet-700 ring-violet-200/70"
+                        : "bg-slate-50/90 text-slate-500 ring-slate-200/70"
+                    }`}
+                  >
+                    {clientTypeLabel(c.client_type)}
+                  </span>
                 </p>
                 <p className="mt-0.5 text-sm text-slate-600">
                   {c.contact_email ?? c.email_norm ?? "nessuna email"} ·{" "}
@@ -210,6 +315,38 @@ export default async function ClientsPage({
                     </strong>
                   )}
                 </p>
+
+                {/* Completamento rapido (038/039) in LISTA: la ditta citata
+                    nei lead si salva (o rigetta) senza aprire la scheda —
+                    stesse azioni server, stesso audit, stessa regola del banner. */}
+                {c.azienda_suggerita && (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-2xl border border-amber-200/60 bg-amber-50/40 px-3 py-2 text-xs text-slate-700">
+                    <span className="min-w-0">
+                      <strong className="font-semibold text-slate-900">{c.azienda_suggerita}</strong>{" "}
+                      citata nei suoi lead ({c.azienda_suggerita_citazioni}) —
+                    </span>
+                    <form action={salvaDittaAction} className="inline">
+                      <input type="hidden" name="id" value={c.id} />
+                      <input type="hidden" name="ditta" value={c.azienda_suggerita} />
+                      <button
+                        type="submit"
+                        className="inline-flex min-h-8 items-center rounded-full bg-brand-600/90 px-3 py-1 text-xs font-semibold text-white shadow-glass-btn transition hover:bg-brand-700"
+                      >
+                        Salva in scheda
+                      </button>
+                    </form>
+                    <form action={rigettaDittaAction} className="inline">
+                      <input type="hidden" name="id" value={c.id} />
+                      <input type="hidden" name="ditta" value={c.azienda_suggerita} />
+                      <button
+                        type="submit"
+                        className="inline-flex min-h-8 items-center rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-white/60 transition hover:bg-white"
+                      >
+                        Non è la sua
+                      </button>
+                    </form>
+                  </div>
+                )}
               </div>
 
               {/* Budget dichiarato: colonna propria della card (quando c'è).
@@ -267,7 +404,7 @@ export default async function ClientsPage({
         ))}
         {clients.length === 0 && (
           <GlassNotice>
-            {q
+            {q || tipo || senzaDitta
               ? "Nessun cliente trovato con questo filtro."
               : "Portafoglio vuoto: Ambrosio lo popola al primo giro di sync (cron ogni 15 minuti) oppure premi «Sincronizza ora»."}
           </GlassNotice>

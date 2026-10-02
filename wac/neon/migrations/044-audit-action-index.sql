@@ -1,0 +1,31 @@
+-- ═══════════════════════════════════════════════════════════════════
+-- 044 AUDIT ACTION INDEX — le letture «ultimo evento per azione»
+-- smettono di scansionare il log.
+-- ═══════════════════════════════════════════════════════════════════
+--
+-- Contesto: audit_log cresce a ogni navigazione admin (admin.render,
+-- ADR-005: una riga per caricamento) oltre che a ogni azione (login,
+-- backup, purga cache, test integrazioni…). Gli hub e le schede degli
+-- strumenti leggono l'ultimo evento filtrando per action:
+--
+--   - readBackupStatus()        → action in ('backup.creato','backup.errore')
+--   - readLastPurge()           → action in ('cache.purga','cache.purga.errore')
+--   - getLastTurnstileTest()    → action = 'cloudflare.test'
+--   - readNotion() (ultimo sync)→ action = 'notion.sync'
+--
+-- La 010 aveva dato a audit_log gli indici (created_at desc) e
+-- (actor, created_at desc); la 041 ha aggiunto (target, action,
+-- created_at desc) per l'attribuzione del takeover — che parte da
+-- target, non serve a un filtro per SOLO action. Senza un indice che
+-- parta da action, ogni caricamento dell'hub Tools/Impostazioni paga
+-- una scansione del log che cresce nel tempo.
+--
+-- Questo indice serve ESATTAMENTE quelle query: pattern «action IN (…)
+-- ORDER BY created_at DESC LIMIT 1» → una sola voce dell'indice, a
+-- prescindere dalla dimensione del log.
+--
+-- Additiva e idempotente: nessuna colonna, nessun backfill, nessuna
+-- riscrittura (audit_log è append-only dalla 010).
+
+create index if not exists audit_log_action_created_idx
+  on audit_log (action, created_at desc);

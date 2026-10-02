@@ -36,6 +36,21 @@ export const RESTORE_ORDER = [
   "shield_bans",
 ] as const;
 
+export interface CloudBackupInfo {
+  /** Chiave dell'oggetto nel bucket (auto/db-YYYY-MM-DD-HHMMSS.json.gz). */
+  key: string;
+  /** Giornata Roma del deposito (YYYY-MM-DD, dal nome del file). */
+  day: string;
+  /** Ora del deposito (HHMMSS, dal nome del file). */
+  time: string;
+  /** Dimensione del file gzip depositato, in byte. */
+  bytes: number;
+  /** sha256 del gzip (metadata dell'oggetto, calcolato al deposito). */
+  sha256: string;
+  /** Ultimo aggiornamento dell'oggetto nel bucket. */
+  lastModified: string;
+}
+
 /**
  * admin_users è FUORI dal ciclo backup/restore, non un'esclusione da UI:
  * non deve esistere nemmeno come opzione selezionabile.
@@ -65,6 +80,38 @@ export const RESTORABLE: readonly string[] = RESTORE_ORDER.filter((t) => !RESTOR
  * includere la dipendenza (messaggio chiaro, nessuna scrittura).
  * Dedotte dal grafo information_schema, filtro sulle sole RESTORABLE.
  */
+export interface RestoreSourceInfo {
+  day?: string;
+  time?: string;
+  bytes?: number;
+  sha256?: string;
+}
+
+/**
+ * Descrizione della FONTE del restore: per il backup dal CLOUD aggiunge
+ * dimensione e sha256 (rilevanti quando si ripristina il file depositato
+ * nel bucket Neon, non un JSON caricato a mano). null per l'upload manuale.
+ */
+export function describeRestoreSource(source?: RestoreSourceInfo | null): string | null {
+  if (!source) return null;
+  const parts: string[] = [];
+  if (typeof source.bytes === "number" && source.bytes > 0) parts.push(humanBytesStr(source.bytes) + " gzip");
+  if (typeof source.sha256 === "string" && source.sha256.length >= 12) parts.push(`sha256 ${source.sha256.slice(0, 12)}…`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
+function humanBytesStr(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let v = n;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) {
+    v /= 1024;
+    u++;
+  }
+  return `${v.toFixed(v >= 100 || u === 0 ? 0 : 1).replace(".", ",")} ${units[u]}`;
+}
+
 export const RESTORE_DEPS: Record<string, string[]> = {
   operators: [],
   packages: [],

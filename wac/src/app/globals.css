@@ -554,6 +554,98 @@ a.glass-solid {
   }
 }
 
+/* ── Barra di ricerca: focus scale/lift + entrata chips (solo CSS) ──
+   Sostituisce le animazioni framer-motion di SearchBar (dieta bundle). */
+.search-bar {
+  transition:
+    transform 0.45s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.3s ease;
+}
+.search-bar.is-focused {
+  transform: translateY(-2px) scale(1.015);
+}
+.search-chips .search-chip {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  animation: chip-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+.search-chips .search-chip:nth-child(1) { animation-delay: 0.35s; }
+.search-chips .search-chip:nth-child(2) { animation-delay: 0.41s; }
+.search-chips .search-chip:nth-child(3) { animation-delay: 0.47s; }
+.search-chips .search-chip:nth-child(4) { animation-delay: 0.53s; }
+.search-chips .search-chip:nth-child(5) { animation-delay: 0.59s; }
+.search-chips .search-chip:nth-child(n + 6) { animation-delay: 0.65s; }
+.search-chips .search-chip:active { transform: scale(0.94); }
+@keyframes chip-in {
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-bar,
+  .search-bar.is-focused { transition: none; transform: none; }
+  .search-chips .search-chip {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Banner cookie: entrata dal basso (solo CSS, ex framer-motion) ── */
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(80px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.cookie-banner {
+  animation: banner-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cookie-banner { animation: none; }
+}
+
+/* ── Card d'ingresso (login admin, ex framer-motion spring) ── */
+.card-in {
+  animation: card-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(28px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-in { animation: none; }
+}
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── REVEAL ALLO SCROLL (sostituto framer-motion per le pagine pubbliche) ──
+   motion.tsx aggiunge `is-revealed` quando l'elemento entra nel viewport
+   (IntersectionObserver, once): qui gli stili nascosti e la transizione.
+   Stessa estetica del vecchio spring framer: fade + salita morbida. */
+.rv,
+.rv-group .rv-item {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rv { transition-delay: var(--rv-delay, 0s); }
+/* Stagger: ogni figlio attende la propria fetta; delay base del gruppo. */
+.rv-group.is-revealed .rv-item {
+  transition-delay: calc(var(--rv-delay, 0s) + var(--i, 0) * var(--rv-stagger, 0.08s));
+}
+.rv.is-revealed,
+.rv-group.is-revealed .rv-item {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* No-JS o IO assente: il contenuto non deve mai restare invisibile.
+   (motion.tsx aggiunge is-revealed subito se IntersectionObserver manca.) */
+@media (prefers-reduced-motion: reduce) {
+  .rv,
+  .rv-group .rv-item {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
 

@@ -36,9 +36,11 @@ export default async function LeadsPage() {
   const pool = db();
   if (!pool) return <p className="text-sm text-red-600">Database non configurato (vedi SETUP.md → Neon).</p>;
 
-  const { rows: leads } = await pool.query<LeadRow>(
-    "select * from leads order by created_at desc limit 200",
-  );
+  const [{ rows: leads }, { rows: totals }] = await Promise.all([
+    pool.query<LeadRow>("select * from leads order by created_at desc limit 200"),
+    pool.query<{ n: number }>("select count(*)::int as n from leads"),
+  ]);
+  const totale = totals[0]?.n ?? leads.length;
 
   return (
     <div className="space-y-4">
@@ -58,6 +60,16 @@ export default async function LeadsPage() {
       </header>
 
       <div className="grid gap-3">
+        {/* Onestà sul troncamento: la query ha limit 200. Il numero delle
+            card non è il numero dei lead: se il totale supera il limite
+            l'utente deve saperlo — gli stessi dati si esportano COMPLETI
+            via CSV (stesso invariante del segmento condiviso del gemello). */}
+        {totale > leads.length && (
+          <GlassNotice tone="info">
+            Mostrati i primi {leads.length} lead su {totale} totali —
+            l&apos;export CSV contiene l&apos;elenco completo.
+          </GlassNotice>
+        )}
         {leads.map((lead) => (
           <Card key={lead.id} className="flex flex-col gap-3 md:flex-row md:items-start">
             {/* Colonna identità: titolo, RIGA DI STATO UNICA, contesto. Le

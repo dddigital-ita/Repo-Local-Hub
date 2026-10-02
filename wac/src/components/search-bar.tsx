@@ -2,14 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import { trackEvent } from "@/lib/ga";
 import { SEARCH_CHIPS } from "@/lib/site";
 import { cn } from "./ui";
+import { useHeroVariant } from "@/components/hero-ab-gate";
 
 /**
  * L'hook del sito: una barra di ricerca gigante che conduce alla chat.
  * Ogni invio = evento GA4 search_start con la query.
+ *
+ * Gemello-pari nei due repo (dieta bundle): focus scale/lift e entrata
+ * chips sono transizioni CSS native (classi `search-*` in globals.css) —
+ * framer-motion (≈70 kB gzip nel first load) fuori da qui.
  */
 export default function SearchBar({
   autoFocus = false,
@@ -18,7 +22,8 @@ export default function SearchBar({
   showChips = true,
 }: {
   autoFocus?: boolean;
-  /** Variante A/B dell'hero: se presente, ogni search_start la riporta a GA4. */
+  /** Variante A/B dell'hero: se presente, ogni search_start la riporta a GA4.
+      Se assente, legge il contesto del cancellò dell'hero (home). */
   heroVariant?: string;
   /** Invito animato (glow + shake): attivo di default, DA SPENERE quando
    *  nella stessa pagina c'è già la barra dell'hero (due barre che tremano
@@ -28,12 +33,15 @@ export default function SearchBar({
   showChips?: boolean;
 }) {
   const router = useRouter();
+  // Variante A/B: dalla prop (chiamante che la conosce) o dal
+  // contesto del cancellò (home: la decide il browser).
+  const gateVariant = useHeroVariant();
+  const abVariant = heroVariant ?? gateVariant;
   const [q, setQ] = useState("");
   const [focused, setFocused] = useState(false);
   const [typing, setTyping] = useState(false);
   /** Invito attivo: la barra "chiama" finché il visitatore non la tocca/digita. */
   const [calling, setCalling] = useState(beckoning);
-  const reduce = useReducedMotion();
   const ref = useRef<HTMLInputElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -57,7 +65,6 @@ export default function SearchBar({
   function onType(value: string) {
     setQ(value);
     setCalling(false);
-    if (reduce) return;
     setTyping(value.length > 0);
     if (typingTimer.current) clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => setTyping(false), 1200);
@@ -76,28 +83,25 @@ export default function SearchBar({
     trackEvent("search_start", {
       search_term: clean,
       source: typeof window !== "undefined" ? window.location.pathname : "/",
-      ...(heroVariant ? { hero_variant: heroVariant } : {}),
+      ...(abVariant ? { hero_variant: abVariant } : {}),
     });
     router.push(`/consulenza?q=${encodeURIComponent(clean)}`);
   }
 
   return (
     <div className="w-full">
-      <motion.form
+      <form
         onSubmit={(e) => {
           e.preventDefault();
           go(q);
         }}
         role="search"
-        initial={false}
-        animate={{ scale: focused ? 1.015 : 1, y: focused && !beckoning ? -2 : 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 26 }}
         className={cn(
-          "glass search-glow flex items-center gap-2 rounded-full p-2 pl-5",
+          "glass search-glow search-bar flex items-center gap-2 rounded-full p-2 pl-5",
           focused && "shadow-glass-hover",
           typing && "is-typing",
           focused && !typing && "is-focused",
-          calling && !reduce && "is-beckoning",
+          calling && "is-beckoning",
         )}
       >
         <svg
@@ -129,33 +133,20 @@ export default function SearchBar({
         >
           Cerca
         </button>
-      </motion.form>
+      </form>
 
       {showChips && (
-      <motion.div
-        className="mt-4 flex flex-wrap items-center justify-center gap-2"
-        initial="hidden"
-        animate="shown"
-        variants={{ hidden: {}, shown: { transition: { staggerChildren: 0.06, delayChildren: 0.35 } } }}
-      >
-        {SEARCH_CHIPS.map((chip) => (
-          <motion.button
-            key={chip.label}
-            variants={{
-              hidden: { opacity: 0, y: 10, scale: 0.96 },
-              shown: {
-                opacity: 1, y: 0, scale: 1,
-                transition: { type: "spring", stiffness: 320, damping: 24 },
-              },
-            }}
-            whileTap={reduce ? undefined : { scale: 0.94 }}
-            onClick={() => go(chip.query)}
-            className="rounded-full border border-white/50 bg-white/50 px-4 py-1.5 text-sm text-slate-600 backdrop-blur-xl transition-colors hover:bg-white/80 hover:text-brand-700"
-          >
-            {chip.label}
-          </motion.button>
-        ))}
-      </motion.div>
+        <div className="search-chips mt-4 flex flex-wrap items-center justify-center gap-2">
+          {SEARCH_CHIPS.map((chip) => (
+            <button
+              key={chip.label}
+              onClick={() => go(chip.query)}
+              className="search-chip rounded-full border border-white/50 bg-white/50 px-4 py-1.5 text-sm text-slate-600 backdrop-blur-xl transition-colors hover:bg-white/80 hover:text-brand-700"
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

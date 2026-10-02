@@ -22,15 +22,17 @@ export default async function ChatEmojiPage() {
         backLabel="Impostazioni"
         Icon={Smile}
         title="Emoji della chat pubblica"
-        subtitle={`Le emoticon che i visitatori vedono nel picker del composer della chat, nell'ordine scelto. Cercale nel catalogo o digitalle, riordinalo con le frecce: fino a ${CHAT_EMOJIS_MAX}.`}
+        subtitle={`Le emoticon del picker nel composer della chat pubblica: cercale nel catalogo in italiano, digitalle o riordinale con le frecce. La sequenza è il menu dei visitatori — fino a ${CHAT_EMOJIS_MAX}.`}
       />
 
       <Card>
-        <ChatEmojiEditor initial={emojis} max={CHAT_EMOJIS_MAX} defaultCount={CHAT_EMOJIS_DEFAULT.length} />
+        <ChatEmojiEditor initial={emojis} max={CHAT_EMOJIS_MAX} defaults={CHAT_EMOJIS_DEFAULT} />
         <p className="mt-3 text-xs text-slate-400">
-          {customized
-            ? "Set personalizzato: vale subito per tutte le nuove chat."
-            : "Stai usando il set predefinito: salvalo per personalizzarlo."}
+          {`Il catalogo e il picker pubblico condividono una fonte sola: ogni emoji cercabile in italiano nel composer è nel catalogo, e viceversa. Ogni voce vale fino a 8 code point (le emoji composte con modificatore o ZWJ ne contano 3–4) e l'ordine delle righe è l'ordine del menu nel composer. Le modifiche valgono subito: la chat legge il set a ogni richiesta. Con zero emoji salvate il picker torna sulle ${CHAT_EMOJIS_DEFAULT.length} predefinite. ${
+            customized
+              ? "Set personalizzato attivo."
+              : "Stai usando il set predefinito: salvalo per personalizzarlo."
+          }`}
         </p>
       </Card>
     </div>

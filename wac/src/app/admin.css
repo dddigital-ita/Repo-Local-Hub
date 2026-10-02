@@ -80,11 +80,19 @@
 }
 .pill-flash-success { animation: pill-flash 400ms ease-out 1; }
 
+/* Skeleton di caricamento admin (loading.tsx): respiro morbido sugli
+   spaziose, così il passaggio skeleton → pagina non lampeggia. */
+@keyframes wac-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .msg-in,
   .pop-in,
   .pill-flash-success { animation: none; }
   .sla-late-dot { animation: none; }
+  .admin-skeleton [data-skeleton] { animation: none !important; }
 }
 
 /* Scrollbar sottile per i pannelli scrollabili della inbox ticket */

@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { db } from "./db";
 import { logAudit } from "./audit";
 
@@ -243,46 +244,113 @@ export async function getAdminSessions(): Promise<AdminSessionRow[]> {
   }
 }
 
+/**
+ * Diagnostica del rigetto sessione (difetto sul vivo: document 307 / RSC 200
+ * con lo stesso cookie). Fire-and-forget in audit: ogni rifiuto dice PERCHÉ.
+ * Volume basso (getAdminUser gira solo su /admin). Da tenere: è telemetria
+ * operativa, non codice temporaneo.
+ */
+async function rejectSession(reason: string, email?: string): Promise<null> {
+  try {
+    await logAudit(email ?? "sconosciuto", "session.rejected", reason, null);
+  } catch {
+    // l'audit non deve mai rompere la guardia
+  }
+  return null;
+}
+
 export async function getAdminUser(): Promise<AdminIdentity | null> {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
-  if (!token) return null;
+  if (!token) return null; // nessun cookie: non è un rigetto, è un'arrivo anonimo (rumore: niente log)
   const [b64, sig] = token.split(".");
-  if (!b64 || !sig) return null;
+  if (!b64 || !sig) return rejectSession("formato_cookie");
   let payload: string;
   try {
     payload = Buffer.from(b64, "base64url").toString();
   } catch {
-    return null;
+    return rejectSession("payload_non_decodificabile");
   }
-  if (sign(payload) !== sig) return null;
+  if (sign(payload) !== sig) return rejectSession("firma_hmac_diversa", payload.split("|")[0]);
   const [email, expiry, operatorId, displayName, pwMark] = payload.split("|");
-  if (!email || !expiry || Number(expiry) < Date.now()) return null;
-  // Rivocaibilità: senza impronta (cookie pre-fix) o con utente cancellato o
-  // password cambiata la sessione non vale più. Fail-closed: se il DB non
-  // risponde, la sessione è rifiutata (niente "fail open" di cortesia).
-  const pool = db();
-  if (!pool) return null;
-  try {
-    const { rows } = await pool.query<{ password_hash: string; active: boolean }>(
-      "select password_hash, active from admin_users where email = $1",
-      [email.toLowerCase().trim()],
-    );
-    const current = rows[0]?.password_hash;
-    if (!current || !pwMark || pwMark !== pwFingerprint(current)) return null;
-    // Account disattivato da un super admin: il cookie firmato resta formalmente
-    // valido ma la sessione vale zero (enforcement centrale: copre requireAdmin
-    // e ogni pagina /admin senza eccezioni).
-    if (rows[0].active === false) return null;
-  } catch {
-    return null; // DB irraggiungibile: nessuna sessione accettata
-  }
+  if (!email || !expiry || Number(expiry) < Date.now())
+    return rejectSession(!email ? "payload_vuoto" : `scaduto_${Math.round((Date.now() - Number(expiry)) / 60000)}min`, email);
+  const res = await loadAdminRow(email.toLowerCase().trim());
+  // I rigetti infrastrutturali arrivano motivati dal loader: stessa telemetria
+  // session.rejected di prima, una query sola per richiesta.
+  if (!res.ok) return rejectSession(res.reason, email);
+  const rows = res.rows;
+  const current = rows[0]?.password_hash;
+  if (!current) return rejectSession("utente_assente", email);
+  if (!pwMark) return rejectSession("cookie_senza_fingerprint_pre_fix", email);
+  if (pwMark !== pwFingerprint(current)) return rejectSession("fingerprint_diverso_password_cambiata", email);
+  // Account disattivato da un super admin: il cookie firmato resta formalmente
+  // valido ma la sessione vale zero (enforcement centrale: copre requireAdmin
+  // e ogni pagina /admin senza eccezioni).
+  if (rows[0].active === false) return rejectSession("account_disattivato", email);
   return {
     email,
     operatorId: operatorId && operatorId !== "-" ? operatorId : null,
     displayName: displayName && displayName !== "-" ? decodeURIComponent(displayName) : email.split("@")[0],
   };
 }
+
+/**
+ * LA RIGA ADMIN DELLA RICHIESTA, UNA VOLTA SOLA (ADR-005).
+ *
+ * Ogni pagina /admin esegue requireAdmin() e il layout esegue getAdminUser()
+ * (due volte con l'area personale, via getAppUser): prima della memoizzazione
+ * erano 3-4 SELECT identiche su Neon per OGNI navigazione — il clock del
+ * caricamento admin era riempito da auth, non dalle pagine. cache() di React
+ * deduplca DENTRO la singola richiesta: richieste diverse continuano a
+ * riverificare (impronta, attivazione, disattivazione: la semantica di
+ * revoca resta identica); è il ricaricamento delle STESSE pagine a non
+ * paginare più l'auth quattro volte.
+ *
+ * Il recupero dal socket morto (blip Neon: proxy che chiude gli idle) resta
+ * QUI, una volta sola: stessa regex dei transienti che c'era dentro
+ * getAdminUser, così anche il secondo chiamante di una richiesta ne eredita
+ * il beneficio invece di rifarsi il percorso a mano.
+ *
+ * Convenzione del ritorno: ok = riga letta dal DB (anche assente: rows vuote);
+ * NON ok = il motivo del fallimento (db_non_configurato, db_errore_non_transient,
+ * db_persistente con dettaglio) che getAdminUser registra in audit come ha
+ * sempre fatto — stessa telemetria, una query sola per richiesta.
+ */
+type AdminRowResult =
+  | { ok: true; rows: { password_hash: string; active: boolean }[] }
+  | { ok: false; reason: string };
+
+const loadAdminRow = cache(
+  async (email: string): Promise<AdminRowResult> => {
+    const pool = db();
+    if (!pool) return { ok: false, reason: "db_non_configurato" };
+    const loadRow = () =>
+      pool.query<{ password_hash: string; active: boolean }>(
+        "select password_hash, active from admin_users where email = $1",
+        [email],
+      );
+    try {
+      return { ok: true, rows: (await loadRow()).rows };
+    } catch (e) {
+      // Serverless + Neon: il proxy chiude i socket inattivi e la prima query su
+      // un socket morto fallisce. Senza questo recupero, un BLIP transitorio
+      // slogava chi ha un cookie perfettamente valido (fail-closed troppo zelante:
+      // «clic → di nuovo al login», il difetto visto sul vivo). Il fingerprint e
+      // l'attivazione vengono RIVERIFICATI sul DB dopo il risveglio: nessuna
+      // revoca reale (password cambiata, utente disattivato/cancellato) salta.
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/terminat|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|connection|timeout|socket/i.test(msg))
+        return { ok: false, reason: `db_errore_non_transient:${msg.slice(0, 60)}` };
+      try {
+        await pool.query("select 1"); // risveglia/ricrea la connessione del pool
+        return { ok: true, rows: (await loadRow()).rows };
+      } catch (e2) {
+        return { ok: false, reason: `db_persistente:${(e2 instanceof Error ? e2.message : String(e2)).slice(0, 60)}` };
+      }
+    }
+  },
+);
 
 export async function requireAdmin(): Promise<AdminIdentity> {
   const user = await getAdminUser();

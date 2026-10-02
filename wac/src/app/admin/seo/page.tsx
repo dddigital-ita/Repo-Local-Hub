@@ -197,7 +197,7 @@ export default async function SeoPage({
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
               Le query reali sono nel pannello qui sotto; il collegamento API si gestisce in{" "}
-              <Link href="/admin/tools/google" className="text-brand-700 underline">
+              <Link href="/admin/settings/google" className="text-brand-700 underline">
                 Google growth kit
               </Link>
               .

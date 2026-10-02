@@ -107,6 +107,9 @@ export default function TicketChat({ conversationId }: { conversationId: string 
   // loading parte true e viene solo SPENTO dal primo load riuscito: i polling
   // successivi non lo riaccendono (niente skeleton che lampeggia ogni 4s).
   const [loading, setLoading] = useState(true);
+  // Skeleton lento (revisione UX §2.6): se il primo load tarda oltre 3s,
+  // lo skeleton DICE che sta ancora lavorando invece di sembrare appeso.
+  const [slow, setSlow] = useState(false);
   const [nearBottom, setNearBottom] = useState(true);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const nearBottomRef = useRef(true);
@@ -125,6 +128,7 @@ export default function TicketChat({ conversationId }: { conversationId: string 
         messages?: { id: string; sender: string; body: string; author?: string | null; created_at: string }[];
       };
       if (Array.isArray(data.messages)) {
+        setSlow(false); // il load è arrivato: lo skeleton torna normale
         if (animFrom === null && data.messages.length) {
           // Primo batch: da qui in avanti i NUOVI messaggi animano.
           setAnimFrom(Date.now());
@@ -153,11 +157,47 @@ export default function TicketChat({ conversationId }: { conversationId: string 
   useEffect(() => {
     const raf = requestAnimationFrame(() => void load());
     const t = setInterval(() => void load(), 4000);
+    // Un solo stato extra: se il PRIMO load non è arrivato entro 3s, lo
+    // skeleton dichiara il ritardo (poi resta fintanto che loading dura).
+    const slowT = setTimeout(() => setSlow(true), 3000);
     return () => {
       cancelAnimationFrame(raf);
       clearInterval(t);
+      clearTimeout(slowT);
     };
   }, [load]);
+
+  // Unread per chi è su un altro tab (revisione UX §2.3): nuovo messaggio
+  // del CLIENTE + tab nascosto → il titolo della tab porta il conto
+  // «(n) Inbox», tornando com'era al ritorno. Il polling 4s aggiorna la
+  // chat ma il titolo era cieco: un agente su altro tab non vedeva
+  // arrivare nulla finché non tornava a guardare.
+  const lastSeenRef = useRef<number | null>(null);
+  const unseenRef = useRef(0);
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (last && last.sender === "visitor") {
+      const ts = new Date(last.created_at).getTime();
+      // Il PRIMO giro fissa il baseline: i messaggi già presenti al mount
+      // non contano come «nuovi» — solo quelli che arrivano dopo.
+      if (lastSeenRef.current === null) lastSeenRef.current = ts;
+      else if (ts > lastSeenRef.current) {
+        lastSeenRef.current = ts;
+        if (document.hidden) {
+          unseenRef.current += 1;
+          document.title = `(${unseenRef.current}) Inbox`;
+        }
+      }
+    }
+    function onVisible() {
+      if (!document.hidden) {
+        unseenRef.current = 0;
+        document.title = "Admin | Web Agency Crema";
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [messages]);
 
   // L'aggiunta di messaggi deve scorrere solo se l'agente non sta rileggendo
   useEffect(() => {
@@ -204,7 +244,14 @@ export default function TicketChat({ conversationId }: { conversationId: string 
         aria-label={`Conversazione del ticket ${conversationId}`}
       >
         {loading ? (
-          <ChatSkeleton />
+          <>
+            <ChatSkeleton />
+            {slow && (
+              <p role="status" className="mt-1 text-center text-xs font-medium text-slate-500">
+                Ancora carico… la conversazione sta arrivando
+              </p>
+            )}
+          </>
         ) : (
           rendered
         )}

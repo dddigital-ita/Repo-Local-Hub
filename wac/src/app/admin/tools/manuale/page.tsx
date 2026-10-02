@@ -113,13 +113,13 @@ const SITO: Blocco = {
     },
     {
       title: "Impostazioni — come si comporta il sistema",
-      text: "Risposte rapide, SLA, chiusura automatica, email, WhatsApp, follow-up dei lead: si toccano una volta e poi restano. Le trovi nella nav, sezione Impostazioni.",
+      text: "Risposte rapide, SLA, email, WhatsApp e Google growth kit (Impostazioni › Integrazioni): si toccano una volta e poi restano. Le trovi nella nav, sezione Impostazioni.",
       href: "/admin/settings",
       label: "Impostazioni",
     },
     {
       title: "Tools — le configurazioni grosse",
-      text: "Tema grafico, Hero animato, Backup, Google growth kit: cambiano tutto il sito, si usano raramente. Le pagine di sistema (Notion, SEO, Shield, Audit) stanno nella stessa pagina, più in basso.",
+      text: "Tema grafico, Hero animato, Backup: cambiano tutto il sito, si usano raramente. Le pagine di sistema (Notion, SEO, Audit) stanno nella stessa pagina, più in basso.",
       href: "/admin/tools",
       label: "Tools",
     },

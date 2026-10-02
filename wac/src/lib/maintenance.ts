@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { backupReminderDecidiPure, DAY_MS, BACKUP_REMINDER_STATE_KEY } from "./maintenance-shared";
 import { RESTORE_ORDER, RESTORABLE, RESTORE_DEPS, isBackupNever, missingCascadeChildren } from "./restore-shared";
 
 /**
@@ -22,6 +23,8 @@ import { RESTORE_ORDER, RESTORABLE, RESTORE_DEPS, isBackupNever, missingCascadeC
  */
 
 export const BACKUP_REMINDER_KEY = "backup_reminder_days";
+// BACKUP_REMINDER_STATE_KEY (stato dedup) vive in maintenance-shared:
+// la chiave è parte della regola, e la regola è testata lì.
 export const DEFAULT_BACKUP_REMINDER_DAYS = 7;
 
 /** Dimensione leggibile («1,2 MB») per lo storico e i messaggi. */
@@ -207,9 +210,9 @@ export async function setBackupReminderDays(days: number): Promise<void> {
 }
 
 /**
- * Il promemoria deve suonare? true se l'ultimo backup è più vecchio di N
- * giorni (o non ce ne sono) e N > 0. Indipendente dai soft-deleted: conta
- * l'ultimo backup FATTO, non quello visibile.
+ * Il promemoria deve suonare? La regola vive in maintenance-shared
+ * (backupReminderDecidiPure, testata): qui solo il recupero dati —
+ * soglia, ultimo backup e stato del dedup.
  */
 export async function backupReminderDue(): Promise<{ due: boolean; lastAt: Date | null; days: number }> {
   const days = await getBackupReminderDays();
@@ -221,12 +224,39 @@ export async function backupReminderDue(): Promise<{ due: boolean; lastAt: Date 
       "select max(created_at) as last_at from backup_history",
     );
     const lastAt = rows[0]?.last_at ?? null;
-    if (!lastAt) return { due: true, lastAt: null, days };
-    const ageMs = Date.now() - new Date(lastAt).getTime();
-    return { due: ageMs > days * 24 * 60 * 60 * 1000, lastAt, days };
+    const { rows: st } = await pool.query<{ value: unknown }>(
+      "select value from content_settings where key = $1",
+      [BACKUP_REMINDER_STATE_KEY],
+    );
+    const giàRaw = st[0]?.value;
+    const giàSuonatoA = giàRaw == null ? null : Number(giàRaw);
+    const d = backupReminderDecidiPure({
+      days,
+      lastAtMs: lastAt ? new Date(lastAt).getTime() : null,
+      nowMs: Date.now(),
+      giàSuonatoA,
+    });
+    return { due: d.due, lastAt, days };
   } catch {
     return { due: false, lastAt: null, days };
   }
+}
+
+/**
+ * Registra che il promemoria È suonato (dedup): salva l'età in giorni
+ * interi — o il sentinella 999_999 se non c'è mai stato un backup. La
+ * riarma non serve esplicita: al primo tick con età > ultima suonata,
+ * backupReminderDue torna true da sé (vedi backupReminderDecidiPure).
+ */
+export async function markBackupReminderSent(lastAt: Date | null): Promise<void> {
+  const pool = db();
+  if (!pool) return;
+  const etàGiorni = lastAt ? Math.floor((Date.now() - lastAt.getTime()) / DAY_MS) : 999_999;
+  await pool.query(
+    `insert into content_settings (key, value, updated_at) values ($1, $2::jsonb, now())
+     on conflict (key) do update set value = $2::jsonb, updated_at = now()`,
+    [BACKUP_REMINDER_STATE_KEY, JSON.stringify(etàGiorni)],
+  );
 }
 
 /**

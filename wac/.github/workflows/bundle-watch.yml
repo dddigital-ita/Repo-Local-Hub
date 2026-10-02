@@ -1,0 +1,89 @@
+# BUNDLE WATCH in CI — sorveglianza First Load e tempi di build a ogni release.
+#
+# Da Next 16 la tabella "First Load JS" non esiste piu' nell'output di build:
+# la misura qui e' scripts/measure-payload.mjs (payload gzip reale della home).
+#
+# CONTRATTO (ricalibrato 30/09 dopo la dieta framer-motion):
+#   198 kB  build webpack-16 del Passo 2 (riferimento storico)
+#   278 kB  regresso Turbopack+framer nel first load (mai accettato: il check
+#           e' rimasto rosso per un ciclo — il deploy passava solo col redeploy)
+#   242 kB  dopo la dieta: framer-motion fuori dal first load pubblico
+#           (reveal, banner cookie, barra, hero ora sono CSS nativo)
+#   255 kB  budget d'allarme (+5% sulla misura attuale: margine per micro-
+#           crescite legitime, ma un framer-motion intero fa 70 kB e scatta)
+#
+# La build gira SENZA DATABASE_URL (verificato: exit 0, home 200 con fallback
+# CSS del hero): in CI non servono segreti. I tempi sono comparabili solo tra
+# run della stessa classe di runner (github: ubuntu-latest), non con il locale.
+# Se il payload cresce oltre budget, la misura nuova va nel contratto PRIMA del
+# merge: l'allarme deve restare un contratto, non un rumore.
+
+name: Bundle watch
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      # v5+ girano NATIVE su Node 24 (le v4 targettavano Node 20: deprecated).
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build di release (guard incluso, cronometrata)
+        run: |
+          start=$(date +%s)
+          npm run build > /tmp/build.log 2>&1
+          code=$?
+          elapsed=$(( $(date +%s) - start ))
+          echo "BUILD_EXIT=$code" >> "$GITHUB_ENV"
+          echo "BUILD_SECONDS=$elapsed" >> "$GITHUB_ENV"
+          echo "build: exit $code in ${elapsed}s"
+          tail -n 12 /tmp/build.log
+          exit $code
+
+      - name: Avvio del server di misura (senza DB, come in produzione build-only)
+        run: |
+          npx next start -p 3483 > /tmp/start.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null http://localhost:3483/; then break; fi
+            sleep 1
+          done
+
+      - name: Misura del payload (home, gzip reale)
+        run: node scripts/measure-payload.mjs http://localhost:3483 / | tee /tmp/measure.txt
+
+      - name: Budget d'allarme (255 kB gzip)
+        run: node scripts/check-bundle-budget.mjs /tmp/measure.txt --budget 255
+
+      - name: Registra build e first load nella summary
+        if: always()
+        run: |
+          {
+            echo "### Bundle watch"
+            echo ""
+            echo "| Metrica | Valore |"
+            echo "|---|---|"
+            echo "| Build (webpack, guard incluso) | ${BUILD_SECONDS:-n/d} s (exit ${BUILD_EXIT:-n/d}) |"
+            echo "| First load home (gzip) | $(grep -oE 'FIRST_LOAD_GZ_KB=[0-9.]+' /tmp/measure.txt | cut -d= -f2) kB |"
+            echo "| Budget d'allarme | 255 kB |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Salva il report della misura
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bundle-report
+          path: /tmp/measure.txt
+          if-no-files-found: ignore

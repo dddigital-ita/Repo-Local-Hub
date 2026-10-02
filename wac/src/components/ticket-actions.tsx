@@ -24,7 +24,9 @@ import { toastSaved } from "@/components/admin-toaster";
  * anche a raffica. Su errore la pagina si riallinea ai dati reali del DB.
  */
 
-function useChain() {
+/** Esportato: i pannelli upgrade (tag, escalation, merge)
+ *  condividono la stessa coda concatenata. */
+export function useChain() {
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   const router = useRouter();
   const enqueue = (

@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { Globe, Mail, MessageCircle, MessagesSquare, NotebookPen, Send, Settings, ShieldCheck, Smile, Sparkles, Timer, TimerReset } from "lucide-react";
+import { AtSign, Globe, Mail, MessageCircle, MessagesSquare, NotebookPen, Send, Settings, ShieldCheck, Smile, Sparkles, Tags, Timer, TimerReset } from "lucide-react";
 import { GlassCard as Card, GlassSectionHeader } from "@/components/glass";
 import { HubCard, HubCount, HubStatus } from "@/components/settings-hub";
 import { requireAdmin } from "@/lib/admin";
 import { hubSummary, type HubCardStatus } from "@/lib/settings-status";
 import { getSettingsStatuses } from "@/lib/settings-status-server";
 import { getIntegrationStatuses } from "@/lib/integrations-status";
+import { getTicketTagVocabulary } from "@/lib/tickets";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +26,12 @@ function PillStack({ children }: { children: React.ReactNode }) {
  */
 export default async function SettingsPage() {
   await requireAdmin();
-  const [statuses, integrations] = await Promise.all([
+  const [statuses, integrations, tagVocabulary] = await Promise.all([
     getSettingsStatuses(),
     getIntegrationStatuses(),
+    getTicketTagVocabulary(),
   ]);
-  const { replies, chatEmojis, sla, autoClose, email, whatsapp, telegram, followup, cloudflare } = statuses;
+  const { replies, chatEmojis, sla, autoClose, email, whatsapp, telegram, social, followup, cloudflare } = statuses;
   /** Le integrazioni del registro entrano nel riepilogo: l'hub le mostra
       nella sezione Integrazioni, la pill deve raccontare tutto l'hub. */
   const integrationStatuses: HubCardStatus[] = integrations.map(({ def, warn }) => ({
@@ -48,6 +50,7 @@ export default async function SettingsPage() {
     email,
     whatsapp,
     telegram,
+    social,
     followup,
     cloudflare,
     ...integrationStatuses,
@@ -93,6 +96,19 @@ export default async function SettingsPage() {
             }
           />
           <HubCard
+            href="/admin/settings/tag-vocabulary"
+            Icon={Tags}
+            tone="bg-white/70 text-slate-600"
+            title="Vocabolario dei tag"
+            text="I tag suggeriti dalla datalist nell'editor dei tag di ogni ticket: uno per riga, etichette non frasi."
+            right={
+              <PillStack>
+                <HubCount n={tagVocabulary.length} label="tag" />
+                <HubStatus ok={tagVocabulary.length > 0} label={tagVocabulary.length ? "Attivo" : "Vuoto"} />
+              </PillStack>
+            }
+          />
+          <HubCard
             href="/admin/settings/sla"
             Icon={Timer}
             tone="bg-white/70 text-orange-600"
@@ -115,21 +131,6 @@ export default async function SettingsPage() {
             text="Chiude in automatico i ticket «In attesa cliente» dopo N giorni di silenzio (opzionale, eseguita dal cron)."
             right={<HubStatus ok={autoClose.ok} label={autoClose.label} />}
           />
-          <HubCard
-            href="/admin/settings/emoji-chat"
-            Icon={Smile}
-            tone="bg-white/70 text-brand-700"
-            title="Emoji della chat"
-            text="Le emoticon del picker che i visitatori usano nel composer della chat pubblica."
-            right={
-              <PillStack>
-                {chatEmojis.counts.map((c) => (
-                  <HubCount key={c.label} n={c.n} label={c.label} />
-                ))}
-                <HubStatus ok={chatEmojis.ok} label={chatEmojis.label} />
-              </PillStack>
-            }
-          />
         </div>
       </Card>
 
@@ -138,7 +139,7 @@ export default async function SettingsPage() {
         <GlassSectionHeader
           icon={Mail}
           title="Canali"
-          subtitle="Con quali mezzi parla l'agenzia: email collegata, WhatsApp in arrivo."
+          subtitle="Con quali mezzi parla l'agenzia: email, WhatsApp, Telegram, canali social e la chat pubblica."
         />
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <HubCard
@@ -170,6 +171,29 @@ export default async function SettingsPage() {
             title="Telegram"
             text="Il canale bidirezionale di Ambrosio: bot, chat del team e webhook si gestiscono qui, senza toccare l'env."
             right={<HubStatus ok={telegram.ok} warn={telegram.warn} label={telegram.label} />}
+          />
+          <HubCard
+            href="/admin/settings/social"
+            Icon={AtSign}
+            tone="bg-white/70 text-indigo-600"
+            title="Canali social"
+            text="Facebook, Instagram Business e LinkedIn via OAuth: id, app secret e token cifrati nel database. Dopo il «Collega» i webhook verificano già le firme."
+            right={<HubStatus ok={social.ok} warn={social.warn} label={social.label} />}
+          />
+          <HubCard
+            href="/admin/settings/emoji-chat"
+            Icon={Smile}
+            tone="bg-white/70 text-brand-700"
+            title="Emoji della chat"
+            text="Le emoticon del picker che i visitatori usano nel composer della chat pubblica."
+            right={
+              <PillStack>
+                {chatEmojis.counts.map((c) => (
+                  <HubCount key={c.label} n={c.n} label={c.label} />
+                ))}
+                <HubStatus ok={chatEmojis.ok} label={chatEmojis.label} />
+              </PillStack>
+            }
           />
         </div>
       </Card>
@@ -217,7 +241,7 @@ export default async function SettingsPage() {
         <GlassSectionHeader
           icon={NotebookPen}
           title="Integrazioni"
-          subtitle="Dove arrivano i dati dell'agenzia e come si collegano i servizi esterni."
+          subtitle="Dove arrivano i dati dell'agenzia e come si collegano i servizi esterni: i canali di comunicazione stanno in Canali."
         />
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {integrations.map(({ def, ok, warn, label, counts, meta }) => (

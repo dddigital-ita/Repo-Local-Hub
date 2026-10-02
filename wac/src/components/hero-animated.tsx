@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { motion, useReducedMotion } from "framer-motion";
 import { trackEvent } from "@/lib/ga";
 import { SEARCH_CHIPS } from "@/lib/site";
 import { cn } from "./ui";
@@ -32,15 +31,25 @@ import HeroCanvasEngine from "./hero-canvas-engine";
  *
  * La scia del mouse vive in HeroCursorGlow (portale su body): qui c'è solo
  * il marker data-hero su <html> che la accende e la spegne.
+ *
+ * Dieta bundle (30/09): reveal in sequenza, focus della barra e tap dei chip
+ * sono transizioni CSS (classi `hero-step` in globals.css) — framer-motion
+ * (≈70 kB gzip nel first load) è fuori da qui.
  */
 
-/* ── Reveal in sequenza (spring iOS: le stesse costanti di motion.tsx) ── */
-const springSoft = { type: "spring", stiffness: 170, damping: 22, mass: 1 } as const;
-
-const stepVariants = {
-  hidden: { opacity: 0, y: 18 },
-  shown: { opacity: 1, y: 0, transition: springSoft },
-};
+/** prefers-reduced-motion letto come store esterno (niente setState in effect). */
+function useReducedMotion(): boolean {
+  const subscribe = useCallback((onChange: () => void) => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const getSnapshot = useCallback(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+}
 
 /** Caret: una parola alla volta, poi pausa, poi riparte. Zero se reduced. */
 function useTypewriter(text: string, active: boolean, reduced: boolean) {
@@ -100,6 +109,8 @@ interface Props {
 
 export default function HeroAnimated({ config, variant = "animated" }: Props) {
   const c = useMemo(() => heroWithFallbacks(config), [config]);
+  // prefers-reduced-motion via useSyncExternalStore (niente setState in effect):
+  // il CSS ha la sua media query, qui serve solo per il typewriter.
   const reduce = useReducedMotion();
   const router = useRouter();
   const sectionRef = useRef<HTMLElement>(null);
@@ -178,26 +189,19 @@ export default function HeroAnimated({ config, variant = "animated" }: Props) {
       )}
       {c.template === "aurora" && <div aria-hidden className="hero-aurora" />}
       <Container className="relative z-10 flex flex-col items-center pb-20 pt-16 text-center sm:pt-24">
-        <motion.div
-          initial={reduce ? false : "hidden"}
-          animate="shown"
-          variants={{ hidden: {}, shown: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } } }}
-          className="flex w-full flex-col items-center"
-          style={{ ["--hero-delay" as string]: "0.15" }}
-        >
+        <div className="hero-sequence flex w-full flex-col items-center">
           {/* Eyebrow (badge) */}
-          <motion.div variants={stepVariants}>
+          <div className="hero-step">
             <GlassBadge>
               <MapPin className="h-3.5 w-3.5 text-brand-600" aria-hidden />
               {c.eyebrow}
             </GlassBadge>
-          </motion.div>
+          </div>
 
           {/* Titolo */}
-          <motion.h1
-            variants={stepVariants}
+          <h1
             className={cn(
-              "mt-5 max-w-3xl text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl",
+              "hero-step mt-5 max-w-3xl text-4xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-5xl",
               fontClass,
               c.template === "gradient-flow" && "hero-gradient-title",
             )}
@@ -206,29 +210,23 @@ export default function HeroAnimated({ config, variant = "animated" }: Props) {
             <span className={cn("block", showTitle && accentClass, !showTitle && "hero-gradient-text")}>
               {c.titleHighlight}
             </span>
-          </motion.h1>
+          </h1>
 
           {/* Sottotitolo */}
-          <motion.p
-            variants={stepVariants}
-            className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-600"
-          >
+          <p className="hero-step mt-4 max-w-2xl text-lg leading-relaxed text-slate-600">
             {c.subtitle}
-          </motion.p>
+          </p>
 
           {/* Barra di ricerca */}
-          <motion.div variants={stepVariants} className={cn("mt-10 w-full max-w-3xl", barWrapClass)}>
-            <motion.form
+          <div className={cn("hero-step mt-10 w-full max-w-3xl", barWrapClass)}>
+            <form
               role="search"
               onSubmit={(e) => {
                 e.preventDefault();
                 go(q);
               }}
-              initial={false}
-              animate={{ scale: focused ? 1.015 : 1, y: focused ? -2 : 0 }}
-              transition={{ type: "spring", stiffness: 300, damping: 26 }}
               className={cn(
-                "glass search-glow flex items-center gap-2 rounded-full p-2 pl-5",
+                "glass search-glow search-bar flex items-center gap-2 rounded-full p-2 pl-5",
                 focused && "shadow-glass-hover",
                 glowOn && "is-typing",
                 focused && !glowOn && "is-focused",
@@ -263,38 +261,24 @@ export default function HeroAnimated({ config, variant = "animated" }: Props) {
               >
                 Cerca
               </button>
-            </motion.form>
-          </motion.div>
+            </form>
+          </div>
 
           {/* Chips suggerimenti (entrata in coda al resto) */}
-          <motion.div
-            className="mt-4 flex flex-wrap items-center justify-center gap-2"
-            initial="hidden"
-            animate="shown"
-            variants={{ hidden: {}, shown: { transition: { staggerChildren: 0.06, delayChildren: 0.35 } } }}
-          >
+          <div className="hero-sequence-chips mt-4 flex flex-wrap items-center justify-center gap-2">
             {SEARCH_CHIPS.map((chip) => (
-              <motion.button
+              <button
                 key={chip.label}
-                variants={{
-                  hidden: { opacity: 0, y: 10, scale: 0.96 },
-                  shown: {
-                    opacity: 1, y: 0, scale: 1,
-                    transition: { type: "spring", stiffness: 320, damping: 24 },
-                  },
-                }}
-                whileTap={reduce ? undefined : { scale: 0.94 }}
                 onClick={() => go(chip.query)}
-                className="rounded-full border border-white/50 bg-white/50 px-4 py-1.5 text-sm text-slate-600 backdrop-blur-xl transition-colors hover:bg-white/80 hover:text-brand-700"
+                className="hero-chip rounded-full border border-white/50 bg-white/50 px-4 py-1.5 text-sm text-slate-600 backdrop-blur-xl transition-colors hover:bg-white/80 hover:text-brand-700"
               >
                 {chip.label}
-              </motion.button>
+              </button>
             ))}
-          </motion.div>
+          </div>
 
-        </motion.div>
+        </div>
       </Container>
     </section>
   );
 }
-

@@ -20,6 +20,11 @@ export async function generateStaticParams() {
 // salvataggio purga la cache quando l'admin cambia meta o slug.
 export const dynamicParams = true;
 
+// ISR: i contenuti (testi, SEO, pacchetti) cambiano raramente;
+// la rigenerazione ogni 10 minuti copre anche gli slug personalizzati
+// (dynamicParams) non enumerabili a build time.
+export const revalidate = 600;
+
 export async function generateMetadata({
   params,
 }: {

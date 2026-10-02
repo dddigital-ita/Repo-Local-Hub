@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Phone, MessageCircle, Search, Sparkles, Smile } from "lucide-react";
 import {
@@ -86,7 +85,6 @@ export default function Chat({
   /** Set dell'admin da /admin/settings/emoji-chat; undefined = default. */
   emojis?: string[];
 }) {
-  const reduceMotion = useReducedMotion();
   const [phase, setPhase] = useState<Phase>("searching");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [typing, setTyping] = useState(false);
@@ -474,41 +472,22 @@ export default function Chat({
   return (
     <div className="flex min-h-[100dvh] flex-col bg-white md:min-h-0">
       {/* Stato turno: sempre visibile */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 260, damping: 24 }}
-        className="glass mx-4 mt-4 rounded-full px-4 py-2 text-center text-xs text-slate-600 md:mx-6"
-      >
+      <div className="chat-enter-down glass mx-4 mt-4 rounded-full px-4 py-2 text-center text-xs text-slate-600 md:mx-6">
         {status ? status.statusLine : "…"}
-      </motion.div>
+      </div>
 
       {/* Splash ricerca */}
-      <AnimatePresence mode="wait">
         {phase === "searching" && (
-          <motion.div
-            key="searching"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, y: -12 }}
-            className="flex flex-1 flex-col items-center justify-center px-6 py-16"
-          >
-            <motion.p
-              className="text-lg font-medium text-slate-700"
-              initial={{ opacity: 0.5 }}
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ repeat: Infinity, duration: 1.4 }}
-            >
+          <div key="searching" className="chat-searching flex flex-1 flex-col items-center justify-center px-6 py-16">
+            <p className="chat-searching-label text-lg font-medium text-slate-700">
               Sto cercando «{query}»…
-            </motion.p>
+            </p>
             <div className="mt-6 grid w-full max-w-md gap-3">
               {team.slice(0, 3).map((t, i) => (
-                <motion.div
+                <div
                   key={t.id}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 + i * 0.35 }}
-                  className="glass flex items-center gap-3 rounded-3xl p-4"
+                  className="chat-card-in glass flex items-center gap-3 rounded-3xl p-4"
+                  style={{ animationDelay: `${0.1 + i * 0.15}s` }}
                 >
                   {t.photo ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -527,12 +506,11 @@ export default function Chat({
                       {t.role} · {t.availability}
                     </p>
                   </div>
-                </motion.div>
+                </div>
               ))}
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
 
       {/* Chat */}
       {phase !== "searching" && (
@@ -544,12 +522,9 @@ export default function Chat({
               const avatarSrc = ambrosio ? null : agentPhoto;
               const initial = ambrosio ? "A" : agentInitial;
               return (
-                <motion.div
+                <div
                   key={i}
-                  initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 28 }}
-                  className={cn("chat-row items-end gap-2", m.sender === "visitor" ? "is-visitor justify-end" : "justify-start")}
+                  className={cn("chat-row chat-row-in items-end gap-2", m.sender === "visitor" ? "is-visitor justify-end" : "justify-start")}
                 >
                   {/* Avatar stile Telegram: batch = iniziale in gradiente, agente = foto */}
                   {showAvatar && (
@@ -589,18 +564,17 @@ export default function Chat({
                       {visitorInitialChar}
                     </span>
                   )}
-                </motion.div>
+                </div>
               );
             })}
             {(typing || aiThinking) && (
               <div className="chat-row justify-start">
                 <div className="glass flex items-center gap-1 rounded-3xl rounded-bl-md px-4 py-3">
                   {[0, 1, 2].map((d) => (
-                    <motion.span
+                    <span
                       key={d}
-                      className="h-1.5 w-1.5 rounded-full bg-slate-400"
-                      animate={{ opacity: [0.3, 1, 0.3] }}
-                      transition={{ repeat: Infinity, duration: 1, delay: d * 0.2 }}
+                      className="chat-dot h-1.5 w-1.5 rounded-full bg-slate-400"
+                      style={{ animationDelay: `${d * 0.2}s` }}
                     />
                   ))}
                 </div>
@@ -650,17 +624,14 @@ export default function Chat({
                       </p>
                       <div className="flex flex-wrap justify-center gap-2">
                         {status.callbackSlots.map((slot, si) => (
-                          <motion.button
+                          <button
                             key={slot}
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.15 + si * 0.08, type: "spring", stiffness: 400, damping: 26 }}
-                            whileTap={reduceMotion ? undefined : { scale: 0.94 }}
                             onClick={() => bookCallback(slot)}
-                            className="rounded-full border border-brand-200 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100"
+                            className="chat-chip-in tap-scale rounded-full border border-brand-200 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-100"
+                            style={{ animationDelay: `${0.15 + si * 0.08}s` }}
                           >
                             {slot}
-                          </motion.button>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -672,32 +643,20 @@ export default function Chat({
 
           {/* Bottoni di risposta */}
           {showButtons && currentStep?.buttons && (
-            <motion.div
-              initial="hidden"
-              animate="shown"
-              variants={{ hidden: {}, shown: { transition: { staggerChildren: 0.06 } } }}
-              className="px-4 py-3"
-            >
+            <div className="px-4 py-3">
               <div className="mx-auto flex max-w-md flex-wrap gap-2">
-                {currentStep.buttons.map((b) => (
-                  <motion.button
+                {currentStep.buttons.map((b, bi) => (
+                  <button
                     key={b.value}
-                    variants={{
-                      hidden: { opacity: 0, y: 10, scale: 0.96 },
-                      shown: {
-                        opacity: 1, y: 0, scale: 1,
-                        transition: { type: "spring", stiffness: 400, damping: 26 },
-                      },
-                    }}
-                    whileTap={reduceMotion ? undefined : { scale: 0.94 }}
                     onClick={() => handleAnswer(b.value)}
-                    className="rounded-full border border-brand-200/60 bg-brand-50/80 px-4 py-2 text-sm font-medium text-brand-700 backdrop-blur-xl transition-colors hover:bg-brand-100/90"
+                    className="chat-chip-in tap-scale rounded-full border border-brand-200/60 bg-brand-50/80 px-4 py-2 text-sm font-medium text-brand-700 backdrop-blur-xl transition-colors hover:bg-brand-100/90"
+                    style={{ animationDelay: `${bi * 0.06}s` }}
                   >
                     {b.label}
-                  </motion.button>
+                  </button>
                 ))}
               </div>
-            </motion.div>
+            </div>
           )}
 
           {/* Consenso GDPR */}
@@ -765,17 +724,15 @@ export default function Chat({
                 >
                   <Smile className="h-4 w-4" aria-hidden />
                 </button>
-                <motion.button
+                <button
                   type="submit"
                   aria-label="Invia"
-                  whileTap={reduceMotion ? undefined : { scale: 0.85 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="shrink-0 rounded-full bg-brand-600/90 p-2.5 text-white shadow-glass-btn backdrop-blur-xl transition-colors hover:bg-brand-500/90"
+                  className="tap-scale shrink-0 rounded-full bg-brand-600/90 p-2.5 text-white shadow-glass-btn backdrop-blur-xl transition-colors hover:bg-brand-500/90"
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
                     <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12 2-12 2Z" />
                   </svg>
-                </motion.button>
+                </button>
               </div>
             </form>
           )}
@@ -816,17 +773,15 @@ export default function Chat({
                 >
                   <Smile className="h-4 w-4" aria-hidden />
                 </button>
-                <motion.button
+                <button
                   type="submit"
                   aria-label="Invia ad Ambrosio"
-                  whileTap={reduceMotion ? undefined : { scale: 0.85 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className="shrink-0 rounded-full bg-violet-600/90 p-2.5 text-white shadow-glass-btn backdrop-blur-xl transition-colors hover:bg-violet-500/90"
+                  className="tap-scale shrink-0 rounded-full bg-violet-600/90 p-2.5 text-white shadow-glass-btn backdrop-blur-xl transition-colors hover:bg-violet-500/90"
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
                     <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12 2-12 2Z" />
                   </svg>
-                </motion.button>
+                </button>
               </div>
               <p className="mt-1.5 flex items-center justify-center gap-1 text-center text-[11px] text-slate-400">
                 <Sparkles className="h-3 w-3" aria-hidden />

@@ -28,6 +28,13 @@ export function db(): pg.Pool | null {
       connectionString,
       ssl: rawConnectionString?.includes("localhost") ? false : { rejectUnauthorized: false },
       max: 5,
+      // Serverless (Vercel) + Neon: il proxy di Neon chiude i socket inattivi,
+      // e la query successiva su un socket morto fallisce. Chiudiamo NOI i
+      // socket idle PRIMA (30s) e teniamo vivi quelli attivi con keepalive:
+      // il pool si ricongiunge da solo, senza errori a valle.
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+      keepAlive: true,
     });
   }
   return global.__pgPool;

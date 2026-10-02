@@ -156,7 +156,7 @@ export const LANDINGS: LandingContent[] = [
       },
       {
         q: "Quanto costa un progetto con la vostra agenzia?",
-        a: "I siti vetrina partono da 1.000 €, l'e-commerce da 3.000 €. La chat ti dà il preventivo indicativo in 4 domande.",
+        a: "I siti vetrina partono da 800 €, l'e-commerce da 2.500 €. La chat ti dà il preventivo indicativo in 4 domande.",
       },
       {
         q: "Quanti progetti seguite allo stesso tempo?",
@@ -325,7 +325,7 @@ export const LANDINGS: LandingContent[] = [
       },
       {
         q: "Quanto costa la consulenza SEO mensile?",
-        a: "Da 350 € al mese per le attività locali, 700 € per strutture più grandi: niente contratti oltre 12 mesi.",
+        a: "Da 400 € al mese per le attività locali: SEO Locale, niente contratti oltre 12 mesi.",
       },
       {
         q: "Fate anche i contenuti o solo l'ottimizzazione?",
@@ -532,7 +532,7 @@ export const LANDINGS: LandingContent[] = [
       L(`Vuoi un preventivo per un sito web a Crema senza passare da tre telefonate? Qui funziona così:
       scrivi cosa cerchi nella barra, rispondi a 4 domande da 10 secondi e vedi subito la fascia di
       prezzo. Se ti torna, ti richiamiamo in giornata con il numero definitivo.`),
-      L(`Le fasce sono due e mezza: vetrina 1.000–2.000 €, e-commerce 3.000–8.000 €, progetti con
+      L(`Le fasce sono due e mezza: vetrina 800–1.500 €, e-commerce 2.500–8.000 €, progetti con
       integrazioni su misura sopra. Nel prezzo sono inclusi testi, SEO base, formazione e il primo
       anno di manutenzione tecnica. Non ci sono costi "sorpresa": le cose fuori preventivo si
       quottano prima di farle, mai dopo.`),
@@ -541,7 +541,7 @@ export const LANDINGS: LandingContent[] = [
       velocità o la SEO. A volte conviene comunque: ti diciamo anche questo.`),
     ],
     services: [
-      { title: "Fascia vetrina", text: "1.000–2.000 €: 5 pagine, testi, SEO base, online in 7 giorni." },
+      { title: "Fascia vetrina", text: "800–1.500 €: 5 pagine, testi, SEO base, online in 7 giorni." },
       { title: "Fascia e-commerce", text: "3.000–8.000 €: catalogo, pagamenti, spedizioni, formazione." },
       { title: "Fascia su misura", text: "Integrazioni, portali B2B, automazioni: preventivo dedicato in 48 ore." },
       { title: "Preventivo scritto", text: "Vale 30 giorni: cosa è incluso, quando consegna, come si paga." },
@@ -549,7 +549,7 @@ export const LANDINGS: LandingContent[] = [
     faq: [
       {
         q: "Quanto costa in media un sito a Crema?",
-        a: "Per le PMI locali tra 1.000 e 3.000 €: sotto quel prezzo mancano quasi sempre testi e SEO.",
+        a: "Per le PMI locali tra 800 e 3.000 €: sotto quel prezzo mancano quasi sempre testi e SEO.",
       },
       {
         q: "Il preventivo impegna a qualcosa?",
@@ -611,7 +611,7 @@ export const LANDINGS: LandingContent[] = [
       },
       {
         q: "Quanto costa un sito per un'azienda di Cremona?",
-        a: "Le stesse fasce di Crema: vetrina 1.000–2.000 €, e-commerce 3.000–8.000 €.",
+        a: "Le stesse fasce di Crema: vetrina 800–1.500 €, e-commerce 2.500–8.000 €.",
       },
       {
         q: "Seguite anche la SEO a Cremona?",
@@ -671,7 +671,7 @@ export const LANDINGS: LandingContent[] = [
       },
       {
         q: "Quanto costa un sito a Lodi?",
-        a: "Le stesse fasce ovunque lavoriamo: vetrina 1.000–2.000 €, e-commerce 3.000–8.000 €.",
+        a: "Le stesse fasce ovunque lavoriamo: vetrina 800–1.500 €, e-commerce 2.500–8.000 €.",
       },
       {
         q: "Seguite clienti solo lodigiani o anche del Pavia?",

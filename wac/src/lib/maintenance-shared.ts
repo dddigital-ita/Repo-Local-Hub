@@ -14,6 +14,52 @@
 
 export const MAINTENANCE_KEY = "maintenance_mode";
 
+/* ── Dedup del promemoria backup (30/09) ────────────────────────── */
+
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Chiave content_settings dello stato dedup (l'ultima età suonata, in giorni interi). */
+export const BACKUP_REMINDER_STATE_KEY = "backup_reminder_state";
+
+export interface BackupReminderDecision {
+  /** L'avviso va suonato A QUESTO tick? */
+  due: boolean;
+  /** Età dell'ultimo backup in giorni INTERI (999_999 se mai fatto). */
+  etàGiorni: number;
+}
+
+/**
+ * La decisione del promemoria, PURA e testata: suona quando l'ultimo
+ * backup è più vecchio della soglia E il dedup non ha già coperto QUESTA
+ * finestra di età. L'età è in giorni interi (un tick ogni 15 minuti
+ * ripeterebbe lo stesso numero 96 volte al giorno — è successo davvero su
+ * produzione: un audit «oltre 7 giorni» a ogni tick dal 28/09). La riarma
+ * è naturale: l'età cresce di 1 al giorno, quindi a età = ultima suonata
+ * + 1 il promemoria torna; un NUOVO backup riporta l'età sotto soglia e
+ * azzera tutto senza job di reset.
+ */
+export function backupReminderDecidiPure(input: {
+  days: number;
+  lastAtMs: number | null;
+  nowMs: number;
+  giàSuonatoA: number | null;
+}): BackupReminderDecision {
+  const { days, lastAtMs, nowMs, giàSuonatoA } = input;
+  if (!Number.isFinite(days) || days <= 0) return { due: false, etàGiorni: 0 };
+  // Mai fatto un backup: suona UNA volta (dedup a 999_999), poi zitta
+  // finché qualcuno non fa il primo — non un lamento ogni 15 minuti.
+  if (lastAtMs == null) {
+    return { due: giàSuonatoA == null, etàGiorni: 999_999 };
+  }
+  const ageMs = nowMs - lastAtMs;
+  const etàGiorni = Math.floor(Math.max(0, ageMs) / DAY_MS);
+  if (ageMs <= days * DAY_MS) return { due: false, etàGiorni };
+  if (giàSuonatoA != null && Number.isFinite(giàSuonatoA) && etàGiorni <= giàSuonatoA) {
+    return { due: false, etàGiorni };
+  }
+  return { due: true, etàGiorni };
+}
+
 export interface MaintenanceConfig {
   /** Il cancello è attivo? Default: no (il sito normale). */
   active: boolean;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoaderCircle, SendHorizonal } from "lucide-react";
 import { addTicketNote, replyToTicket } from "@/app/admin/actions";
@@ -26,6 +26,59 @@ function useEnqueue() {
 }
 
 /**
+ * Bozza persistente (revisione UX §2.7): cambiare ticket mentre si scrive
+ * NON perde più il testo — la bozza vive in sessionStorage per
+ * conversationId e kind ("reply" | "note"), si ripristina al mount e si
+ * cancella all'invio. sessionStorage (non localStorage): la bozza è un
+ * gesto della SESSIONE di triage, non un dato da ritrovare domani; mai
+ * inviata da sola, è solo un sasso che non si perde.
+ */
+function draftKey(kind: "reply" | "note", conversationId: string) {
+  return `wac-draft-${kind}-${conversationId}`;
+}
+
+function useDraft(kind: "reply" | "note", conversationId: string) {
+  const key = draftKey(kind, conversationId);
+  const taId = `${kind}-${conversationId}`;
+  // Il RIPRISTINO vive in un effect (mai I/O durante il render — regole
+  // react-hooks/purity e refs): la bozza salvata torna nel textarea una
+  // volta montato, e l'evento input sintetico risveglia auto-resize e
+  // contatore senza duplicare la logica. Il textarea si recupera PER ID
+  // (stabilito dal composer), non per ref: nessuna chiusura su ref da
+  // parte delle funzioni esposte, e il linter delle regole React tace.
+  useEffect(() => {
+    const ta = document.getElementById(taId) as HTMLTextAreaElement | null;
+    if (!ta || ta.value) return;
+    try {
+      const saved = sessionStorage.getItem(key);
+      if (saved) {
+        ta.value = saved;
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } catch {
+      /* sessionStorage pieno o non disponibile: niente bozza, nessun errore */
+    }
+  }, [key, taId]);
+  function save(ta: HTMLTextAreaElement | null) {
+    if (!ta) return;
+    try {
+      if (ta.value) sessionStorage.setItem(key, ta.value);
+      else sessionStorage.removeItem(key);
+    } catch {
+      /* idem */
+    }
+  }
+  function clear() {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      /* idem */
+    }
+  }
+  return { save, clear };
+}
+
+/**
  * Risposte rapide: configurabili dall'agente in /admin/settings e salvate su
  * DB (content_settings). La pagina ticket le passa già pronte al composer.
  */
@@ -47,6 +100,7 @@ export function ReplyComposer({
   const [sending, setSending] = useState(false);
   const [len, setLen] = useState(0);
   const enqueue = useEnqueue();
+  const draft = useDraft("reply", conversationId);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -59,6 +113,7 @@ export function ReplyComposer({
     fd.set("body", body);
     input.value = ""; // svuota subito: l'invio parte in coda
     input.style.height = ""; // e il textarea torna compatto
+    draft.clear(); // la bozza è stata inviata: se ne va
     setLen(0);
     setSending(true);
     enqueue(
@@ -94,6 +149,7 @@ export function ReplyComposer({
             onInput={(e) => {
               autoResize(e.currentTarget);
               setLen(e.currentTarget.value.length);
+              draft.save(e.currentTarget);
             }}
             placeholder="Rispondi al cliente…"
             className="w-full resize-none rounded-2xl border border-white/60 bg-white/80 px-4 py-2.5 text-sm leading-relaxed outline-none backdrop-blur-xl transition placeholder:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
@@ -152,6 +208,7 @@ export function ReplyComposer({
 export function TicketNoteComposer({ conversationId }: { conversationId: string }) {
   const [sending, setSending] = useState(false);
   const enqueue = useEnqueue();
+  const draft = useDraft("note", conversationId);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -163,6 +220,7 @@ export function TicketNoteComposer({ conversationId }: { conversationId: string 
     fd.set("conversationId", conversationId);
     fd.set("body", body);
     ta.value = "";
+    draft.clear();
     setSending(true);
     enqueue(
       () => addTicketNote(fd).finally(() => setSending(false)),
@@ -180,6 +238,7 @@ export function TicketNoteComposer({ conversationId }: { conversationId: string 
         name="body"
         rows={2}
         required
+        onInput={(e) => draft.save(e.currentTarget)}
         placeholder="Nota visibile solo al team…"
         className="w-full resize-none rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs outline-none backdrop-blur-xl transition placeholder:text-slate-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
       />

@@ -1,25 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
-
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 
 /**
- * GDPR: nessuno script di misurazione parte prima del consenso.
- * Il provider espone `consent` e `grant()`: Analytics (GA4/GTM/Clarity)
- * viene montato solo quando consent === "granted".
+ * Consenso cookie (GDPR): nessun caricamento statistico prima della scelta.
+ *
+ * Dieta bundle (30/09): il banner usava framer-motion per entrare/uscire —
+ * la libreria intera (≈70 kB gzip) nel first load di OGNI pagina per un
+ * fade+slide che le transizioni CSS fanno identiche (classe `cookie-banner`
+ * in globals.css). Da qui anche l'ultimo import di framer nel layout pubblico.
  */
-type ConsentState = "unknown" | "granted" | "denied";
+
+/** Stato del consenso: unknown finché il visitatore non sceglie. */
+export type ConsentState = "unknown" | "granted" | "denied";
+
+export const CONSENT_COOKIE = "cc_consent";
 
 interface ConsentCtx {
   consent: ConsentState;
@@ -34,8 +30,6 @@ const Ctx = createContext<ConsentCtx>({
   deny: () => {},
   openPreferences: () => {},
 });
-
-export const CONSENT_COOKIE = "cc_consent";
 
 /** Valore del cookie di consenso letto in modo SSR-safe (reagisce al cambio tab). */
 function useConsentSnapshot(): "unknown" | "granted" | "denied" {
@@ -102,7 +96,7 @@ export function ConsentProvider({ children }: { children: ReactNode }) {
       {/* `showBanner` basta: è true solo senza cookie al primo evento o su
           openPreferences() esplicito («Preferenze cookie» nel footer). Chi ha
           già scelto e riapre deve poter CAMBIARE idea, non trovare nulla. */}
-      <AnimatePresence>{showBanner && <CookieBanner />}</AnimatePresence>
+      {showBanner && <CookieBanner />}
     </Ctx.Provider>
   );
 }
@@ -112,14 +106,10 @@ function CookieBanner() {
   return (
     // bg-white è un TOKEN (surface-white): in dark mode il motore temi lo
     // scambia da solo — mai usare dark: qui, segue l'OS e litiga col sito.
-    <motion.div
+    <div
       role="dialog"
       aria-label="Preferenze cookie"
-      initial={{ opacity: 0, y: 80, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 60, scale: 0.97, transition: { duration: 0.2, ease: "easeIn" } }}
-      transition={{ type: "spring", stiffness: 260, damping: 26 }}
-      className="fixed inset-x-3 bottom-3 z-[90] mx-auto max-w-2xl rounded-3xl border border-white/60 bg-white/95 p-4 shadow-glass-hover backdrop-blur-2xl sm:inset-x-6"
+      className="cookie-banner fixed inset-x-3 bottom-3 z-[90] mx-auto max-w-2xl rounded-3xl border border-white/60 bg-white/95 p-4 shadow-glass-hover backdrop-blur-2xl sm:inset-x-6"
     >
       <p className="text-sm leading-relaxed text-slate-600">
         Usiamo cookie tecnici per far funzionare il sito e, <strong>solo con il tuo consenso</strong>,
@@ -130,22 +120,20 @@ function CookieBanner() {
         </Link>
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <motion.button
+        <button
           onClick={grant}
-          whileTap={{ scale: 0.95 }}
-          className="rounded-full bg-brand-600 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+          className="rounded-full bg-brand-600 px-5 py-2 text-sm font-semibold text-white transition-transform active:scale-95 hover:bg-brand-700"
         >
           Accetta tutti
-        </motion.button>
-        <motion.button
+        </button>
+        <button
           onClick={deny}
-          whileTap={{ scale: 0.95 }}
-          className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:border-slate-400"
+          className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 transition-transform active:scale-95 hover:border-slate-400"
         >
           Solo necessari
-        </motion.button>
+        </button>
       </div>
-    </motion.div>
+    </div>
   );
 }
 

@@ -1,0 +1,189 @@
+{
+  "fase": "prodlike-prima",
+  "quando": "01/10/26, 22:07",
+  "generato": "2026-10-01T20:07:35.852Z",
+  "campioni": 5,
+  "attesaSec": 0,
+  "misuratoDa": "192.168.1.7",
+  "cookiePresente": true,
+  "siti": [
+    {
+      "key": "crema",
+      "label": "WebAgencyCrema",
+      "base": "http://localhost:3105",
+      "pagine": [
+        {
+          "path": "/admin",
+          "n": 5,
+          "min": 14,
+          "mediana": 15,
+          "max": 56,
+          "media": 24,
+          "funzione": "",
+          "cache": "",
+          "campioni": [
+            {
+              "ttfbMs": 56,
+              "totalMs": 62,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:35.915Z"
+            },
+            {
+              "ttfbMs": 18,
+              "totalMs": 26,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:36.192Z"
+            },
+            {
+              "ttfbMs": 14,
+              "totalMs": 22,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:36.465Z"
+            },
+            {
+              "ttfbMs": 15,
+              "totalMs": 22,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:36.738Z"
+            },
+            {
+              "ttfbMs": 15,
+              "totalMs": 23,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:37.013Z"
+            }
+          ]
+        },
+        {
+          "path": "/admin/settings",
+          "n": 5,
+          "min": 13,
+          "mediana": 17,
+          "max": 18,
+          "media": 16,
+          "funzione": "",
+          "cache": "",
+          "campioni": [
+            {
+              "ttfbMs": 18,
+              "totalMs": 19,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:37.284Z"
+            },
+            {
+              "ttfbMs": 14,
+              "totalMs": 16,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:37.551Z"
+            },
+            {
+              "ttfbMs": 17,
+              "totalMs": 19,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:37.822Z"
+            },
+            {
+              "ttfbMs": 18,
+              "totalMs": 20,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:38.093Z"
+            },
+            {
+              "ttfbMs": 13,
+              "totalMs": 15,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:38.359Z"
+            }
+          ]
+        },
+        {
+          "path": "/admin/tools",
+          "n": 5,
+          "min": 11,
+          "mediana": 14,
+          "max": 16,
+          "media": 14,
+          "funzione": "",
+          "cache": "",
+          "campioni": [
+            {
+              "ttfbMs": 16,
+              "totalMs": 17,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:38.629Z"
+            },
+            {
+              "ttfbMs": 12,
+              "totalMs": 14,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:38.894Z"
+            },
+            {
+              "ttfbMs": 16,
+              "totalMs": 17,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:39.162Z"
+            },
+            {
+              "ttfbMs": 14,
+              "totalMs": 16,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:39.429Z"
+            },
+            {
+              "ttfbMs": 11,
+              "totalMs": 13,
+              "status": 200,
+              "cache": "",
+              "vercelId": "",
+              "versoLogin": false,
+              "at": "2026-10-01T20:07:39.692Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

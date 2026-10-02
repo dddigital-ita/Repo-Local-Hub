@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   CalendarClock,
   Mail,
+  Merge,
   MessageSquare,
   Phone,
   Sparkles,
@@ -14,19 +15,29 @@ import { requireAdmin } from "@/lib/admin";
 import {
   getTicket,
   getQuickReplies,
+  getTicketTagVocabulary,
   PRIORITY_LABEL,
   STATUS_ACTIONS,
+  STATUS_LABEL,
   TICKET_PRIORITIES,
   awaitsReply,
   slaTier,
 } from "@/lib/tickets";
+import { getDeskContext } from "@/lib/desk-ambrosio";
+import { clientTypeLabelPure } from "@/lib/clients-shared";
 import {
   TicketAssignActions,
   TicketCallbackButton,
   TicketStatusActions,
 } from "@/components/ticket-actions";
+import { TicketTagEditor } from "@/components/ticket-tag-editor";
+import {
+  TicketEscalationPanel,
+  TicketMergePanel,
+} from "@/components/ticket-escalation-merge";
 import { ReplyComposer, TicketNoteComposer } from "@/components/ticket-composers";
 import TicketChat from "@/components/ticket-chat";
+import TicketDeskAmbrosio from "@/components/ticket-desk-ambrosio";
 
 export const dynamic = "force-dynamic";
 
@@ -59,10 +70,13 @@ interface LeadRow {
 
 export default async function TicketDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
 }) {
   const { id } = await params;
+  const { error } = await searchParams;
   const user = await requireAdmin();
   const pool = db();
   if (!pool)
@@ -71,19 +85,25 @@ export default async function TicketDetailPage({
   const ticket = await getTicket(id);
   if (!ticket) notFound();
 
-  const [quickReplies, operators, notesRows, leadRows] = await Promise.all([
-    getQuickReplies(),
-    pool.query<OperatorRow>("select id, first_name from operators where active order by created_at"),
-    pool.query<NoteRow>(
-      "select author_email, body, created_at from ticket_notes where conversation_id = $1 order by created_at",
-      [id],
-    ),
-    pool.query<LeadRow>(
-      `select l.name, l.phone, l.service, l.urgency, l.budget, l.notes, l.source
-       from conversations c join leads l on l.id = c.lead_id where c.id = $1`,
-      [id],
-    ),
-  ]);
+  const [quickReplies, operators, notesRows, leadRows, deskCtx, tagVocabulary] =
+    await Promise.all([
+      getQuickReplies(),
+      pool.query<OperatorRow>("select id, first_name from operators where active order by created_at"),
+      pool.query<NoteRow>(
+        "select author_email, body, created_at from ticket_notes where conversation_id = $1 order by created_at",
+        [id],
+      ),
+      pool.query<LeadRow>(
+        `select l.name, l.phone, l.service, l.urgency, l.budget, l.notes, l.source
+         from conversations c join leads l on l.id = c.lead_id where c.id = $1`,
+        [id],
+      ),
+      // Contesto del pannello Ambrosio (Fase 3): filo, lead, cliente abbinato
+      // e impronte AI reali. Null-safe: se il DB manca la pagina degrada sopra.
+      getDeskContext(id),
+      // Vocabolario canonico dei tag per la datalist dell'editor.
+      getTicketTagVocabulary(),
+    ]);
   const notes = notesRows.rows;
   const lead = leadRows.rows[0] ?? null;
   const waNumber = lead?.phone.replace(/\D/g, "");
@@ -99,6 +119,39 @@ export default async function TicketDetailPage({
         <ArrowLeft className="h-4 w-4" aria-hidden />
         Torna alla inbox
       </Link>
+
+      {/* Errore dell'invio sul canale (es. Meta rifiuta il
+          business-initiated senza template): il ticket esiste,
+          l'operatore legge l'errore dell'API e riprova dal
+          composer. */}
+      {error && (
+        <p role="alert" className="rounded-xl bg-red-50 px-4 py-2.5 text-xs font-medium text-red-700 ring-1 ring-red-200/70">
+          {error}
+        </p>
+      )}
+
+      {/* Banner ticket FUSO (merge): il duplicato resta
+          leggibile (cronologia e note intatte) ma esce da
+          ogni lista; da qui si torna al ticket vivo. */}
+      {ticket.merged_into && (
+        <div className="glass-solid flex flex-wrap items-center gap-x-3 gap-y-1 rounded-3xl p-4 ring-1 ring-violet-200/70">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50/90 px-2.5 py-1 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200/70">
+            <Merge className="h-3.5 w-3.5" aria-hidden />
+            Ticket fuso
+          </span>
+          <p className="text-xs text-slate-600">
+            Questo ticket è stato unito a{" "}
+            <Link
+              href={`/admin/tickets/${ticket.merged_into}`}
+              className="font-mono font-semibold tabular-nums text-brand-700 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+            >
+              #{ticket.merged_into_number ?? "…"}
+            </Link>{" "}
+            ({new Date(ticket.merged_at ?? ticket.updated_at).toLocaleString("it-IT")}): chat e
+            note restano qui, la conversazione continua lì.
+          </p>
+        </div>
+      )}
 
       {/* Header del ticket: identità + permalink + azioni principali */}
       <div className="glass-solid rounded-3xl p-4 sm:p-5">
@@ -152,6 +205,26 @@ export default async function TicketDetailPage({
             conversationId={ticket.id}
             disabled={ticket.status === "closed"}
           />
+          <span aria-hidden className="hidden h-5 w-px bg-white/70 sm:block" />
+          <TicketEscalationPanel
+            key={`esc-${ticket.id}`}
+            ticketId={ticket.id}
+            initialLevel={ticket.escalation_level ?? 0}
+            escalationAt={ticket.escalation_at ?? null}
+            status={ticket.status}
+          />
+        </div>
+
+        {/* Tag: categorizzazione libera con vocabolario
+            suggerito (impostazioni → tag) — una riga
+            sotto la gestione, sopra la barra contesto. */}
+        <div className="mt-3 border-t border-white/60 pt-3">
+          <TicketTagEditor
+            key={`tg-${ticket.id}`}
+            conversationId={ticket.id}
+            initialTags={ticket.tags ?? []}
+            vocabulary={tagVocabulary}
+          />
         </div>
 
         {/* Barra contesto: chi scrive, da dove, che SLA ha */}
@@ -186,7 +259,7 @@ export default async function TicketDetailPage({
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px_320px] xl:items-start">
         {/* Conversazione: il centro della pagina, con composer sempre raggiungibile */}
         <div className="min-w-0 space-y-3">
           <div className="flex items-center justify-between gap-3 px-1">
@@ -208,7 +281,7 @@ export default async function TicketDetailPage({
           </div>
         </div>
 
-        {/* Colonna strumenti: lead + note interne, sticky su xl */}
+        {/* Colonna STRUMENTI: lead + note interne, sticky su xl */}
         <div className="space-y-4 xl:sticky xl:top-28">
           <div className="glass-solid rounded-3xl p-4">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Lead</h3>
@@ -273,9 +346,14 @@ export default async function TicketDetailPage({
                   }`}
                 >
                   <p>{n.body}</p>
+                  {/* Autore PRIMA e in evidenza (revisione UX §2.4): in team
+                      affollato «chi l'ha scritta» pesa più di «quando» — la
+                      caption resta piccola, il nome no. */}
                   <p className="mt-1 text-[10px] text-slate-400">
-                    {n.author_email === "system" ? "audit" : n.author_email} ·{" "}
-                    {new Date(n.created_at).toLocaleString("it-IT", {
+                    <span className={`font-semibold ${n.author_email === "system" ? "" : "text-slate-500"}`}>
+                      {n.author_email === "system" ? "audit" : n.author_email}
+                    </span>{" "}
+                    · {new Date(n.created_at).toLocaleString("it-IT", {
                       day: "numeric",
                       month: "short",
                       hour: "2-digit",
@@ -289,9 +367,85 @@ export default async function TicketDetailPage({
             <TicketNoteComposer key={`nc-${ticket.id}`} conversationId={ticket.id} />
           </div>
 
+          {/* Merge duplicati (migration 046): fonde il
+              secondo ticket aperto per lo stesso identico
+              problema nel primo. Solo su ticket VIVI: un
+              ticket già fuso mostra il banner in alto. */}
+          <div className="glass-solid rounded-3xl p-4">
+            <h3 className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-400">
+              <Merge className="h-3.5 w-3.5" aria-hidden />
+              Merge duplicati
+            </h3>
+            <div className="mt-2.5">
+              <TicketMergePanel
+                key={`mg-${ticket.id}`}
+                ticketId={ticket.id}
+                ticketNumber={ticket.number}
+                statusLabels={STATUS_LABEL}
+                priorityLabels={PRIORITY_LABEL}
+              />
+            </div>
+          </div>
+
           <div className="flex items-center gap-1.5 px-1 text-[11px] text-slate-500">
             <CalendarClock className="h-3 w-3" aria-hidden />
             Collaborazione aperta: chi risponde per primo ferma lo SLA e prende il ticket.
+          </div>
+        </div>
+
+        {/* Colonna CONTESTO (Fase 3): Ambrosio AI + scheda cliente abbinata.
+            Sticky come gli strumenti; su mobile scendono sotto, ordine di
+            lettura naturale (conversazione → strumenti → contesto). */}
+        <div className="space-y-4 xl:sticky xl:top-28">
+          <TicketDeskAmbrosio
+            ticketId={ticket.id}
+            takeover={deskCtx?.ambrosio.takeover ?? false}
+            followup={deskCtx?.ambrosio.followup ?? false}
+            followupDisabled={deskCtx?.ambrosio.followupDisabled ?? false}
+          />
+
+          {/* CRM: la scheda cliente abbinata dal sync portafoglio — il
+              contesto commerciale del filo (chi è, quanto vale, che storia)
+              a un gesto dal ticket. */}
+          <div className="glass-solid rounded-3xl p-4">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Cliente</h3>
+            {deskCtx?.client ? (
+              <div className="mt-2.5 space-y-2 text-sm">
+                <Link
+                  href={`/admin/clients/${deskCtx.client.id}`}
+                  className="inline-flex items-center gap-1.5 font-semibold text-slate-900 transition hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                >
+                  {deskCtx.client.name}
+                  {deskCtx.client.company_name && (
+                    <span className="font-normal text-slate-500">· {deskCtx.client.company_name}</span>
+                  )}
+                </Link>
+                <p className="flex flex-wrap gap-1.5">
+                  <span className="inline-flex items-center rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-white/70">
+                    {clientTypeLabelPure(deskCtx.client.client_type)}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-white/70">
+                    {deskCtx.client.ticket_count} ticket
+                  </span>
+                  {deskCtx.client.budget_total != null && (
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200/70">
+                      ~{Math.round(deskCtx.client.budget_total).toLocaleString("it-IT")} € dichiarati
+                    </span>
+                  )}
+                </p>
+                {deskCtx.client.notes && (
+                  <p className="rounded-xl bg-amber-50/80 p-2 text-xs text-amber-900 ring-1 ring-amber-200/60">{deskCtx.client.notes}</p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">
+                Nessuna scheda abbinata: il sync di Ambrosio la crea quando riconcilia questo ticket (o{" "}
+                <Link href="/admin/clients" className="font-medium text-brand-700 hover:underline">
+                  guarda il portafoglio
+                </Link>
+                ).
+              </p>
+            )}
           </div>
         </div>
       </div>

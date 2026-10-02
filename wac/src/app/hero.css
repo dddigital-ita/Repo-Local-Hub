@@ -394,3 +394,39 @@ html[data-hero-cursor-mode="elastic"] .hero-cursor-trail {
 
 /* Scrollbar sottile — fine blocco hero animato */
 
+
+/* ── REVEAL IN SEQUENZA della home (solo CSS, ex framer-motion) ──
+   GEMELLO-PARI: sezione unificata nei due repo. Stesso ritmo di prima:
+   stagger 0.09s dal badge ai chip, chip in coda. La @keyframes `chip-in`
+   resta definita in globals.css (sezione barra di ricerca): qui si usa,
+   lì si definisce. */
+.hero-sequence .hero-step {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: hero-step-in 0.7s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+.hero-sequence .hero-step:nth-child(1) { animation-delay: 0.05s; }
+.hero-sequence .hero-step:nth-child(2) { animation-delay: 0.14s; }
+.hero-sequence .hero-step:nth-child(3) { animation-delay: 0.23s; }
+.hero-sequence .hero-step:nth-child(4) { animation-delay: 0.32s; }
+@keyframes hero-step-in {
+  to { opacity: 1; transform: none; }
+}
+.hero-sequence-chips .hero-chip {
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  animation: chip-in 0.5s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+.hero-sequence-chips .hero-chip:nth-child(1) { animation-delay: 0.4s; }
+.hero-sequence-chips .hero-chip:nth-child(2) { animation-delay: 0.46s; }
+.hero-sequence-chips .hero-chip:nth-child(3) { animation-delay: 0.52s; }
+.hero-sequence-chips .hero-chip:nth-child(4) { animation-delay: 0.58s; }
+.hero-sequence-chips .hero-chip:nth-child(n + 5) { animation-delay: 0.64s; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-sequence .hero-step,
+  .hero-sequence-chips .hero-chip {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

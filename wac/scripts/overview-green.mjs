@@ -32,7 +32,7 @@ if (mode !== "green" && mode !== "restore") {
 // Carica .env.local come create-admin.mjs (niente dipendenze extra).
 try {
   for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    const m = line.match(/^([A-Z_0-9]+)=(.*)$/);
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^"|"$/g, "");
   }
 } catch {}

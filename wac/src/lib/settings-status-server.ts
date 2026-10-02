@@ -1,4 +1,6 @@
 import { db } from "@/lib/db";
+import { cache } from "react";
+import { readThroughDbConfig } from "@/lib/db-config-cache";
 import {
   CHAT_EMOJIS_DEFAULT,
   getChatEmojis,
@@ -14,12 +16,14 @@ import {
   chatEmojisStatus,
   quickRepliesStatus,
   slaStatus,
+  socialStatus,
   telegramStatus,
   whatsappStatus,
   cloudflareStatus,
   EMPTY_WHATSAPP_CONFIG,
   type HubCardStatus,
 } from "@/lib/settings-status";
+import { getSocialChannelsView } from "@/lib/social-oauth";
 import { getTelegramConfigView } from "@/lib/telegram-config";
 import { getTurnstileSettings } from "@/lib/turnstile-settings";
 import { getLastTurnstileTest } from "@/lib/turnstile-verify";
@@ -42,6 +46,7 @@ export type SettingsStatuses = {
   email: HubCardStatus;
   whatsapp: HubCardStatus;
   telegram: HubCardStatus;
+  social: HubCardStatus;
   followup: HubCardStatus;
   cloudflare: HubCardStatus;
 };
@@ -95,20 +100,33 @@ async function readWhatsAppConfig() {
   }
 }
 
-/** Carica tutto il necessario e deriva i sei stati dell'hub. */
-export async function getSettingsStatuses(): Promise<SettingsStatuses> {
-  const [repliesRaw, emojisRaw, slaRaw, emailRaw, autoCloseDays, followupHours, waRaw, tgView, turnstile, turnstileTest] = await Promise.all([
+/** Carica tutto il necessario e deriva i sei stati dell'hub.
+ *  Memoizzato per richiesta (cache() di React, ADR-005): Panoramica compone
+ *  questo layer + Tools + Integrazioni nella STESSA richiesta — senza dedup
+ *  le letture sarebbero il doppio (10 query per il solo hub Impostazioni).
+ *  Le letture di configurazione passano dal TTL condiviso (60s, ADR-005
+ *  esteso): le schede cambiano solo a salvataggio — la pill può invecchiare
+ *  al massimo un minuto, un fallimento non viene mai memorizzato. Le tre
+ *  chiavi content_settings con bump (SLA, emoji, risposte rapide) restano
+ *  nello snapshot per-request di tickets.ts: la freschezza dopo il salvataggio
+ *  lì è garantita dal bump, qui non serve altro. */
+export const getSettingsStatuses = cache(async (): Promise<SettingsStatuses> => {
+  const [repliesRaw, emojisRaw, slaRaw, emailRaw, autoCloseDays, followupHours, waRaw, tgView, socialAccounts, turnstile, turnstileTest] = await Promise.all([
     getQuickReplies().catch(() => QUICK_REPLIES_DEFAULT),
     getChatEmojis().catch(() => CHAT_EMOJIS_DEFAULT),
     getSlaPolicy().catch(() => ({})),
-    getEmailToolsConfig().catch(() => null),
-    readAutoCloseDays(),
-    readFollowupHours(),
-    readWhatsAppConfig(),
-    getTelegramConfigView().catch(() => null),
+    readThroughDbConfig("email_tools", getEmailToolsConfig).catch(() => null),
+    readThroughDbConfig("autoclose_days", readAutoCloseDays),
+    readThroughDbConfig("followup_hours", readFollowupHours),
+    readThroughDbConfig("whatsapp_config", readWhatsAppConfig),
+    readThroughDbConfig("telegram_view", getTelegramConfigView).catch(() => null),
+    // Canali social: account collegati (vista OAuth). TTL condiviso
+    // come telegram_view: cambia solo al «Collega», la pill può
+    // invecchiare al massimo un minuto. Il reader degredisce a [].
+    readThroughDbConfig("social_accounts", getSocialChannelsView).catch(() => []),
     // Robustezza come le altre letture: DB assente o riga corrotta →
     // il reader degredisce da solo e l'hub mostra «Da configurare».
-    getTurnstileSettings().catch(() => null),
+    readThroughDbConfig("turnstile", getTurnstileSettings).catch(() => null),
     // L'ultimo «Prova verifica» (audit): degredisce a null = mai eseguito.
     getLastTurnstileTest().catch(() => ({ lastTestAt: null, lastTestOk: null })),
   ]);
@@ -127,6 +145,7 @@ export async function getSettingsStatuses(): Promise<SettingsStatuses> {
       hasToken: Boolean(tgView?.hasToken),
       hasTeamChats: Boolean(tgView && tgView.teamChatIds.length > 0),
     }),
+    social: socialStatus(socialAccounts?.length ?? 0),
     followup: leadFollowupStatus(followupHours),
     cloudflare: cloudflareStatus({
       active: Boolean(turnstile?.siteKey),
@@ -135,4 +154,4 @@ export async function getSettingsStatuses(): Promise<SettingsStatuses> {
       lastTestAt: turnstileTest.lastTestAt,
     }),
   };
-}
+});

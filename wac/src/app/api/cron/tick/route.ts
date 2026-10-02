@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { notifyAdmin } from "@/lib/notify";
 import { logAudit } from "@/lib/audit";
-import { backupReminderDue } from "@/lib/maintenance";
+import { backupReminderDue, markBackupReminderSent } from "@/lib/maintenance";
 import { sendLeadFollowup, claimSlaTakeoverCandidates, releaseTakeoverClaim, AI_ACTOR, setToolLevel } from "@/lib/ai-tools";
+import { pullCalendarHub } from "@/lib/calendar-hub";
 import { getAutonomyConfig } from "@/lib/ambrosio-server";
 import { takeoverEnabled, takeoverAnnouncement } from "@/lib/ambrosio-autonomy";
 import { syncClients, isClientsSyncEnabled } from "@/lib/clients";
@@ -11,6 +12,7 @@ import { ingestEmails } from "@/lib/email-tools";
 import { sendMorningDigest } from "@/lib/digest";
 import { sendEveningDigest } from "@/lib/telegram-digest";
 import { takeSeoBackup } from "@/lib/seo-backups";
+import { runCloudBackup, allarmeBackupCloudSeDovuto } from "@/lib/backup-cloud";
 import { pollTelegramUpdates } from "@/lib/telegram-ingest";
 import type { Lang } from "@/lib/language";
 import { loadOperators } from "@/lib/server-context";
@@ -78,10 +80,13 @@ export async function GET(req: Request) {
     emailReplied: 0,
     seoBackup: 0,
     clientsSynced: 0,
+    cloudBackup: "" as string,
+    cloudBackupAlarm: "" as string,
     aiTakeover: 0,
     digest: "",
     telegramIn: 0,
     eveningDigest: "",
+    calendarPull: 0,
   };
 
   try {
@@ -190,6 +195,7 @@ export async function GET(req: Request) {
            (select l.name from leads l where l.id = c.lead_id) as lead_name
          from conversations c
          where c.followup_sent_at is null
+           and c.followup_disabled_at is null
            and c.status = 'lead_captured'
            and c.archived_at is null
            and (
@@ -296,10 +302,50 @@ export async function GET(req: Request) {
             `Scarica l'export JSON completo da Admin → Tools → «Backup e Aggiornamenti Versione».`,
         );
         await logAudit("system", "cron.backup-reminder", null, `oltre ${rem.days} giorni dall'ultimo backup`);
+        // Dedup (flag persistente come le altre automazioni): l'avviso resta
+        // ZITTO per questa finestra di età — senza questo, un audit ogni 15
+        // minuti finché nessuno fa un backup (succedeva davvero: vedi
+        // docs/VALUTAZIONE… e l'audit di produzione). Riarma da sola quando
+        // l'età cresce di un giorno; un nuovo backup azzera tutto.
+        await markBackupReminderSent(rem.lastAt);
       }
     } catch (e) {
       // Migration assente o DB in manutenzione: il tick non deve fallire per questo.
       console.warn("[cron/tick] backup reminder skip:", e instanceof Error ? e.message : e);
+    }
+
+    /* ── 8-bis. Backup automatico GIORNALIERO del DB nel cloud ────── */
+    // Depone su Neon Object Storage una copia restoreabile del DB (formato
+    // JSON della pipeline di restore esistente) con verifica di lettura e
+    // sha256, UNA volta al giorno (dedup su content_settings). Serve a non
+    // dipendere dal Mac acceso per i backup: la retention tiene gli ultimi
+    // 14. Best-effort come tutto il tick; spento senza credenziali storage.
+    try {
+      const cloud = await runCloudBackup("system");
+      if (cloud.done) {
+        summary.cloudBackup = cloud.key ?? "";
+        await notifyAdmin(
+          "💾 Backup automatico nel cloud completato",
+          `Database depositato su Neon Object Storage: ${cloud.key}\n` +
+            `${((cloud.bytes ?? 0) / 1024).toFixed(0)} KB gzip · sha256 ${cloud.sha256?.slice(0, 12)}… · verifica lettura OK.`,
+        );
+      }
+    } catch (e) {
+      console.warn("[cron/tick] cloud backup skip:", e instanceof Error ? e.message : e);
+    }
+
+    /* ── 8-ter. Allarme backup cloud tacente ────────────────────────── */
+    // Rete di sicurezza del 8-bis: se il backup automatico non riesce da
+    // 2 giorni di fila (o non è MAI riuscito), l'amministratore lo sa via
+    // Telegram/email — al massimo un messaggio al giorno, e solo se la
+    // notifica è davvero consegnata (il prossimo tick ritenta altrimenti).
+    // Best-effort come tutto il tick.
+    try {
+      if (await allarmeBackupCloudSeDovuto("system")) {
+        summary.cloudBackupAlarm = "suonato";
+      }
+    } catch (e) {
+      console.warn("[cron/tick] cloud backup alarm skip:", e instanceof Error ? e.message : e);
     }
 
     /* ── 8. Backup automatico settimanale della config SEO ─────────── */
@@ -314,6 +360,20 @@ export async function GET(req: Request) {
       }
     } catch (e) {
       console.warn("[cron/tick] seo backup skip:", e instanceof Error ? e.message : e);
+    }
+
+    /* ── 14. Calendar Hub: pull delle sorgenti (default OFF) ──────── */
+    // Riproietta le callback attive su calendar_items e scarica Google e le
+    // sorgenti iCal ABILITATE nella config (pullEnabled). Idempotente:
+    // ripassare gli stessi eventi non duplica nulla. Mai bloccante, come
+    // tutto il tick: un errore di calendario non tocca gli altri automatismi.
+    try {
+      const pull = await pullCalendarHub("system");
+      if (pull.google.ok || pull.ical.some((r) => r.ok)) {
+        summary.calendarPull = pull.google.pulled + pull.ical.reduce((a, r) => a + r.pulled, 0);
+      }
+    } catch (e) {
+      console.warn("[cron/tick] calendar pull skip:", e instanceof Error ? e.message : e);
     }
 
     /* ── 6. Polling canale email (default ON) ─────────────────────── */

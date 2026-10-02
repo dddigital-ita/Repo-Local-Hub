@@ -25,6 +25,15 @@ const eslintConfig = [
     },
   },
   {
+    // I .cjs sono CommonJS PER DEFINIZIONE: require() è la loro sintassi,
+    // non un oversight (scripts/e2e-port.cjs deve restare CJS nativo perché
+    // il config di Playwright traspira anche i .mjs della sua catena).
+    files: ["**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
     ignores: [
       "node_modules/**",
       // Ogni output di build (WAC_DIST_DIR variabile): .next, .next-prod,

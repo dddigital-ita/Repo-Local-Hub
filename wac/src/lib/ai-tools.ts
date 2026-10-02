@@ -18,6 +18,7 @@
  */
 import { db } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
+import { FOLLOWUP_NOW_AUDIT } from "@/lib/desk-autopilota-shared";
 import { notifyHandoff } from "@/lib/notify";
 import { canSendFollowup, adapterFor, isChannel, toE164 } from "@/lib/messaging";
 import { slotToDate } from "@/lib/slots";
@@ -28,6 +29,8 @@ import { enqueueNotionSync } from "@/lib/notion-queue";
 import { accessAllowed, PROPOSAL_TITLE_MAX, PROPOSAL_BODY_MAX, sanitizeProposalBody, type AmbrosioLevel } from "./ambrosio-autonomy";
 import { insertProposal } from "./ambrosio-server";
 import { queueGCalSyncForCallback } from "./google-calendar";
+import { busySpans } from "./calendar-hub";
+import { freeSlots } from "./calendar-hub-shared";
 
 /** Firma di Ambrosio nell'audit log. */
 export const AI_ACTOR = "ambrosio@ai";
@@ -77,6 +80,8 @@ Funzioni disponibili (nessun'altra esiste):
 - {"fn":"handoff","args":{"motivo":"perché serve un umano"}}
 - {"fn":"cerca_cliente","args":{"telefono":"..."}} oppure {"fn":"cerca_cliente","args":{"email":"..."}} oppure {"fn":"cerca_cliente","args":{"nome":"..."}} — cerca il cliente nel portafoglio: se esiste già, usalo nella nota interna e nell'handoff («è un cliente noto: 3 ticket, ultimo a settembre»). Solo lettura, non modifica nulla.
 - {"fn":"prepara_proposta","args":{"titolo":"...","testo":"proposta completa...","item":"Voce|800 €"}} (item ripetibile fino a 8) — prepara una BOZZA di proposta con preventivo per il team. Solo con servizio e contatti già raccolti; mai promettere al cliente che sia un prezzo definitivo.
+- {"fn":"cerca_slot","args":{}} — chiede al calendario del team i prossimi slot LIBERI (turni reali, impegni Google/CalDAV e personali esclusi). Rispondi citando 2–3 slot con giorno e ora; mai promettere un orario che non sia nella lista.
+- {"fn":"prenota_appuntamento","args":{"quando":"2026-10-01T09:30","titolo":"..."}} — fissa l'appuntamento sul calendario del team (L3). USA SOLO uno slot ottenuto con cerca_slot nella stessa conversazione (data ISO con ora, minuti 00 o 30). Mai prenotare senza il consenso esplicito del cliente.
 
 Regole:
 - salva_lead: usa SOLO dati dichiarati dal cliente; consenso DEVE essere true perché il contatto sia salvato (il "sì" esplicito alla registrazione). Se manca il consenso, non chiamare la funzione.
@@ -85,7 +90,7 @@ Regole:
 - Dopo il blocco <tool> non scrivere altro.
 </tools>`;
 
-const TOOL_FNS = ["salva_lead", "fissa_callback", "aggiorna_ticket", "nota_interna", "handoff", "cerca_cliente", "prepara_proposta"] as const;
+const TOOL_FNS = ["salva_lead", "fissa_callback", "aggiorna_ticket", "nota_interna", "handoff", "cerca_cliente", "prepara_proposta", "cerca_slot", "prenota_appuntamento"] as const;
 
 /**
  * Estrae gli oggetti JSON bilanciando le graffe (sul vivo: due chiamate
@@ -226,6 +231,10 @@ export async function executeToolCall(call: ParsedTool, ctx: ToolContext): Promi
         return await toolCercaCliente(call.args, ctx);
       case "prepara_proposta":
         return await toolPreparaProposta(call.args, ctx);
+      case "cerca_slot":
+        return await toolCercaSlot();
+      case "prenota_appuntamento":
+        return await toolPrenotaAppuntamento(call.args, ctx);
       default:
         return { fn: call.fn, ok: false, detail: "funzione non in whitelist" };
     }
@@ -622,10 +631,17 @@ export function followupText(ctx: FollowupContext): string {
  * tick corrono in parallelo uno solo vince), poi il messaggio. Se l'insert
  * fallisce, il claim viene rilasciato: il peggior caso è un follow-up non
  * partito, mai due messaggi (prima lo spam che il silenzio).
+ *
+ * Raggio anche il «follow-up ora» MANUALE del pannello (opts.manuale):
+ * quell'invio scavalca SOLO il flag followup_disabled_at (l'esclusione
+ * ferma l'automatismo, non la mano dell'operatore) ma MAI la dedup —
+ * UN follow-up per ticket, da chiunque parta — e firma l'audit con
+ * l'operatore invece di "system".
  */
 export async function sendLeadFollowup(
   conversationId: string,
   ctx: FollowupContext,
+  opts: { manuale?: boolean; actor?: string } = {},
 ): Promise<{ ok: boolean; detail: string }> {
   const pool = db();
   if (!pool) return { ok: false, detail: "db non configurato" };
@@ -640,14 +656,23 @@ export async function sendLeadFollowup(
     if (last.rows[0]?.sender !== "visitor") {
       return { ok: false, detail: "l'ultima parola non è più del visitatore: follow-up annullato" };
     }
+    // L'esclusione manuale (followup_disabled_at) ferma solo il CRON: un
+    // invio esplicito dell'operatore la scavalca. La dedup followup_sent_at
+    // invece vale SEMPRE: UN follow-up per ticket, da chiunque parta.
+    const soloCron = opts.manuale ? "" : " and followup_disabled_at is null";
     const upd = await pool.query<{ number: number }>(
       `update conversations set followup_sent_at = now()
-       where id = $1 and followup_sent_at is null
+       where id = $1 and followup_sent_at is null${soloCron}
        returning number`,
       [conversationId],
     );
     if (upd.rows.length === 0) {
-      return { ok: false, detail: "follow-up già inviato o thread non più idoneo (dedup)" };
+      return {
+        ok: false,
+        detail: opts.manuale
+          ? "follow-up già inviato su questo ticket: UNO solo (dedup)"
+          : "follow-up già inviato, escluso dall'operatore o thread non più idoneo (dedup)",
+      };
     }
     try {
       // Fase 4: l'invio passa dal layer messaging (pattern a canali). Oggi la
@@ -664,7 +689,12 @@ export async function sendLeadFollowup(
       await pool.query("update conversations set followup_sent_at = null where id = $1", [conversationId]);
       throw e;
     }
-    await logAudit("system", "cron.lead-followup", String(upd.rows[0].number), "follow-up unico al lead sparito");
+    await logAudit(
+      opts.manuale ? (opts.actor ?? "system") : "system",
+      opts.manuale ? FOLLOWUP_NOW_AUDIT : "cron.lead-followup",
+      String(upd.rows[0].number),
+      opts.manuale ? "follow-up inviato a mano dall'operatore (pannello Ambrosio)" : "follow-up unico al lead sparito",
+    );
     return { ok: true, detail: `follow-up inviato sul ticket #${upd.rows[0].number}` };
   } catch (e) {
     const detail = e instanceof Error ? e.message : String(e);
@@ -831,4 +861,65 @@ export async function getToolUsageStats(days = 30): Promise<ToolUsageStats> {
     console.error("[ai-tools] stats:", e);
     return empty;
   }
+}
+
+/* ── cerca_slot (L2): prossimi slot liberi dal Calendar Hub ───────── */
+
+async function toolCercaSlot(): Promise<ToolResult> {
+  const pool = db();
+  if (!pool) return { fn: "cerca_slot", ok: false, detail: "nessun db" };
+  try {
+    const from = new Date(Date.now() + 3600_000);
+    const to = new Date(from.getTime() + 7 * 24 * 3600_000);
+    const busy = await busySpans(from, to);
+    const slots = freeSlots(busy, { from, days: 5 });
+    if (slots.length === 0) return { fn: "cerca_slot", ok: true, detail: "nessuno slot libero nei prossimi giorni" };
+    const fmt = new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    await logAudit(AI_ACTOR, "ambrosio.cerca_slot", null, `${slots.length} slot liberi nei prossimi 5 giorni`);
+    return { fn: "cerca_slot", ok: true, detail: `slot liberi: ${slots.slice(0, 3).map((s: Date) => fmt.format(s)).join(" · ")}` };
+  } catch (e) {
+    return { fn: "cerca_slot", ok: false, detail: e instanceof Error ? e.message.slice(0, 120) : "errore slot" };
+  }
+}
+
+/* ── prenota_appuntamento (L3): impegno sul calendario del team ───── */
+
+async function toolPrenotaAppuntamento(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
+  const pool = db();
+  if (!pool || !ctx.conversationId) return { fn: "prenota_appuntamento", ok: false, detail: "nessuna conversazione" };
+
+  const raw = str(args.quando, 30);
+  // Solo slot canonici: ISO locale YYYY-MM-DDTHH:MM con minuti 00 o 30 —
+  // il modello NON decide orari liberi: deve venire da cerca_slot.
+  const m = raw?.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!m || (m[5] !== "00" && m[5] !== "30")) {
+    return { fn: "prenota_appuntamento", ok: false, detail: `quando non valido: ${raw ?? "vuoto"} (serve lo slot da cerca_slot, ISO con :00 o :30)` };
+  }
+  const when = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const h = when.getHours();
+  const inWindow = (h >= 9 && h < 13) || (h >= 15 && h < 19);
+  if (!inWindow || when.getTime() < Date.now()) {
+    return { fn: "prenota_appuntamento", ok: false, detail: `orario ${h}:${m[5]} fuori dai turni reali o nel passato` };
+  }
+
+  // Solo su conversazioni con lead salvato (consenso già tracciato lì).
+  const lead = await pool.query<{ id: string }>("select lead_id as id from conversations where id = $1 and lead_id is not null", [ctx.conversationId]);
+  if (!lead.rows[0]?.id) return { fn: "prenota_appuntamento", ok: false, detail: "nessun lead con consenso: prenotazione negata" };
+
+  // Clash check sul hub: lo slot deve ancora essere libero al momento della prenotazione.
+  const end = new Date(when.getTime() + 30 * 60_000);
+  const clash = await pool.query(
+    `select 1 from calendar_items where starts_at < $2 and ends_at > $1 limit 1`,
+    [when, end],
+  );
+  if (clash.rows.length > 0) return { fn: "prenota_appuntamento", ok: false, detail: "slot appena occupato: ricontrolla con cerca_slot" };
+
+  const who = str(args.titolo, 120) || "Appuntamento fissato da Ambrosio";
+  const ins = await pool.query<{ id: string }>(
+    `insert into calendar_items (kind, origin, callback_id, title, starts_at, ends_at, notes)
+     values ('callback', 'manual', null, $1, $2, $3, 'fissato da Ambrosio AI — vede la vista calendario') returning id`,
+    [who, when, end],
+  );
+  await logAudit(AI_ACTOR, "ambrosio.prenota_appuntamento", ins.rows[0].id, `${raw} · ${who}`);
+  return { fn: "prenota_appuntamento", ok: true, detail: `appuntamento fissato ${raw}` };
 }

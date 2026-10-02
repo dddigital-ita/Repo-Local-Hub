@@ -38,7 +38,7 @@ if (!provider || !apiKey || !PROVIDERS.has(provider)) {
 const env = {};
 try {
   for (const line of readFileSync(".env.local", "utf8").split("\n")) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    const m = line.match(/^([A-Z_0-9]+)=(.*)$/);
     if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, "");
   }
 } catch {

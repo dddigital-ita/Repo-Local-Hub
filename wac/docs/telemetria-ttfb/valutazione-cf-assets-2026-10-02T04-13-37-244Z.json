@@ -1,0 +1,971 @@
+{
+  "fase": "valutazione-cf-assets",
+  "generato": "2026-10-02T04:13:37.244Z",
+  "misuratoDa": "192.168.1.7",
+  "siti": [
+    {
+      "key": "crema",
+      "label": "WebAgencyCrema",
+      "base": "https://www.webagencycrema.com",
+      "pagine": [
+        {
+          "path": "/",
+          "htmlBytes": 156480,
+          "assetReferenziati": 20,
+          "assetUnici": 20,
+          "totaleByte": 910225,
+          "perTipo": {
+            "media": {
+              "n": 4,
+              "bytes": 140756
+            },
+            "css": {
+              "n": 3,
+              "bytes": 106263
+            },
+            "chunks": {
+              "n": 13,
+              "bytes": 663206
+            }
+          },
+          "ttfbAsset": {
+            "min": 50,
+            "mediana": 57,
+            "max": 206
+          },
+          "headerModalita": {
+            "cacheControl": [
+              "public,max-age=31536000,immutable"
+            ],
+            "xVercelCache": [
+              "HIT"
+            ],
+            "agePresente": 20
+          },
+          "campioni": [
+            {
+              "url": "https://www.webagencycrema.com/_next/static/media/22a5144ee8d83bca-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 29288,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "218",
+              "xVercelId": "fra1::6969t-1790914418444-a28825857e8a"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/media/4c9affa5bc8f420e-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 206,
+              "bytes": 24576,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "217",
+              "xVercelId": "fra1::p99v4-1790914418617-fa500e0d926f"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/media/e4af272ccee01ff0-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 63,
+              "bytes": 48432,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "217",
+              "xVercelId": "fra1::gv49j-1790914418711-c8680670d471"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/media/eaead17c7dbfcd5d-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 38460,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "216",
+              "xVercelId": "fra1::n79c7-1790914418806-7d8fc69efa1a"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/css/7c92785e7fe793c8.css",
+              "status": 200,
+              "ttfbMs": 60,
+              "bytes": 7401,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "218",
+              "xVercelId": "fra1::449l6-1790914418866-27ad847449a5"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/css/68cc26d37bf65aef.css",
+              "status": 200,
+              "ttfbMs": 52,
+              "bytes": 82230,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "482",
+              "xVercelId": "fra1::449l6-1790914418925-3cb5c9ece4f7"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/css/1f55f1b5987fa733.css",
+              "status": 200,
+              "ttfbMs": 58,
+              "bytes": 16632,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "482",
+              "xVercelId": "fra1::rwwkw-1790914418980-34b460d5a050"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/webpack-7381efbe0aaa618b.js",
+              "status": 200,
+              "ttfbMs": 56,
+              "bytes": 3356,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "220",
+              "xVercelId": "fra1::n9d6q-1790914419042-56ad0d8ba0b8"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/4bd1b696-0562a75e9b1eb3c3.js",
+              "status": 200,
+              "ttfbMs": 57,
+              "bytes": 201060,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "223",
+              "xVercelId": "fra1::kblpk-1790914419097-f93345800d9d"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/3794-e7f5565941eebed7.js",
+              "status": 200,
+              "ttfbMs": 61,
+              "bytes": 241399,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "276",
+              "xVercelId": "fra1::rhwc5-1790914419164-3cce15318844"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/main-app-0ea6bcb40afac604.js",
+              "status": 200,
+              "ttfbMs": 76,
+              "bytes": 923,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "482",
+              "xVercelId": "fra1::gcnqf-1790914419228-c3e60c82d26e"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/8500-e4dd1cb1bb626827.js",
+              "status": 200,
+              "ttfbMs": 59,
+              "bytes": 8665,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "221",
+              "xVercelId": "fra1::qj5gr-1790914419305-38acee7b74ac"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/7411-201220a67fb72fec.js",
+              "status": 200,
+              "ttfbMs": 57,
+              "bytes": 16008,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "222",
+              "xVercelId": "fra1::4mrf8-1790914419366-b886bea2b584"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/8931-c8fd9c0173cc51a2.js",
+              "status": 200,
+              "ttfbMs": 51,
+              "bytes": 7664,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "221",
+              "xVercelId": "fra1::4mrf8-1790914419425-c16287d74d9e"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/7107-0a20cf733c3c4177.js",
+              "status": 200,
+              "ttfbMs": 51,
+              "bytes": 29244,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "222",
+              "xVercelId": "fra1::gcnqf-1790914419477-0b20f218afc5"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/app/layout-07f09238d9ce6110.js",
+              "status": 200,
+              "ttfbMs": 54,
+              "bytes": 15617,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "482",
+              "xVercelId": "fra1::rhwc5-1790914419530-4c6962feedd5"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/7524-a22b08fa7dbd87c6.js",
+              "status": 200,
+              "ttfbMs": 59,
+              "bytes": 11477,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "482",
+              "xVercelId": "fra1::j8vgl-1790914419586-94e22f49bf05"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/6354-fe40836b58b40043.js",
+              "status": 200,
+              "ttfbMs": 50,
+              "bytes": 13516,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "482",
+              "xVercelId": "fra1::gcnqf-1790914419645-b1856c0a4b7d"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/app/page-5b6f592eee0792b7.js",
+              "status": 200,
+              "ttfbMs": 50,
+              "bytes": 1683,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "482",
+              "xVercelId": "fra1::gcnqf-1790914419696-81ba80e6d73c"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/polyfills-42372ed130431b0a.js",
+              "status": 200,
+              "ttfbMs": 52,
+              "bytes": 112594,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "221",
+              "xVercelId": "fra1::j8vgl-1790914419747-c398ac0e4e20"
+            }
+          ]
+        },
+        {
+          "path": "/seo-crema",
+          "htmlBytes": 57731,
+          "assetReferenziati": 20,
+          "assetUnici": 20,
+          "totaleByte": 911887,
+          "perTipo": {
+            "media": {
+              "n": 4,
+              "bytes": 140756
+            },
+            "css": {
+              "n": 3,
+              "bytes": 106263
+            },
+            "chunks": {
+              "n": 13,
+              "bytes": 664868
+            }
+          },
+          "ttfbAsset": {
+            "min": 51,
+            "mediana": 54,
+            "max": 91
+          },
+          "headerModalita": {
+            "cacheControl": [
+              "public,max-age=31536000,immutable"
+            ],
+            "xVercelCache": [
+              "HIT"
+            ],
+            "agePresente": 20
+          },
+          "campioni": [
+            {
+              "url": "https://www.webagencycrema.com/_next/static/media/22a5144ee8d83bca-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 54,
+              "bytes": 29288,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "219",
+              "xVercelId": "fra1::vk8gq-1790914419894-0d80803f72f4"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/media/4c9affa5bc8f420e-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 61,
+              "bytes": 24576,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "218",
+              "xVercelId": "fra1::lm6bn-1790914419954-0109ff9df3a3"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/media/e4af272ccee01ff0-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 52,
+              "bytes": 48432,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "218",
+              "xVercelId": "fra1::gv49j-1790914420017-6a536f69e9e3"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/media/eaead17c7dbfcd5d-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 38460,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "217",
+              "xVercelId": "fra1::sqh2n-1790914420073-346f77f47881"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/css/7c92785e7fe793c8.css",
+              "status": 200,
+              "ttfbMs": 62,
+              "bytes": 7401,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "220",
+              "xVercelId": "fra1::kblpk-1790914420131-4a3f3571cb9c"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/css/68cc26d37bf65aef.css",
+              "status": 200,
+              "ttfbMs": 53,
+              "bytes": 82230,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "483",
+              "xVercelId": "fra1::kblpk-1790914420193-81ae91026114"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/css/1f55f1b5987fa733.css",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 16632,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "483",
+              "xVercelId": "fra1::kblpk-1790914420247-b726e53afcee"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/webpack-7381efbe0aaa618b.js",
+              "status": 200,
+              "ttfbMs": 52,
+              "bytes": 3356,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "221",
+              "xVercelId": "fra1::vk8gq-1790914420303-a0a063cf8689"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/4bd1b696-0562a75e9b1eb3c3.js",
+              "status": 200,
+              "ttfbMs": 54,
+              "bytes": 201060,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "224",
+              "xVercelId": "fra1::vk8gq-1790914420356-982489b422f4"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/3794-e7f5565941eebed7.js",
+              "status": 200,
+              "ttfbMs": 56,
+              "bytes": 241399,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "278",
+              "xVercelId": "fra1::6969t-1790914420416-b5e74d16bd64"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/main-app-0ea6bcb40afac604.js",
+              "status": 200,
+              "ttfbMs": 71,
+              "bytes": 923,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "483",
+              "xVercelId": "fra1::8rhdg-1790914420476-7341c453a342"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/8500-e4dd1cb1bb626827.js",
+              "status": 200,
+              "ttfbMs": 60,
+              "bytes": 8665,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "223",
+              "xVercelId": "fra1::t7gc8-1790914420548-24224f9b3fce"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/7107-0a20cf733c3c4177.js",
+              "status": 200,
+              "ttfbMs": 51,
+              "bytes": 29244,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "224",
+              "xVercelId": "fra1::vk8gq-1790914420608-01e09e11365e"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/7524-a22b08fa7dbd87c6.js",
+              "status": 200,
+              "ttfbMs": 52,
+              "bytes": 11477,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "484",
+              "xVercelId": "fra1::rwwkw-1790914420665-884bbef84b7c"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/6354-fe40836b58b40043.js",
+              "status": 200,
+              "ttfbMs": 91,
+              "bytes": 13516,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "484",
+              "xVercelId": "fra1::rjwwk-1790914420717-7b1019c6ed14"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/app/%5Bslug%5D/page-1adbb21fae739196.js",
+              "status": 200,
+              "ttfbMs": 53,
+              "bytes": 3345,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "480",
+              "xVercelId": "fra1::rwwkw-1790914420808-b53b8e9e5eaf"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/7411-201220a67fb72fec.js",
+              "status": 200,
+              "ttfbMs": 51,
+              "bytes": 16008,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "223",
+              "xVercelId": "fra1::r2djc-1790914420861-27dd1779309d"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/8931-c8fd9c0173cc51a2.js",
+              "status": 200,
+              "ttfbMs": 54,
+              "bytes": 7664,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "223",
+              "xVercelId": "fra1::d6497-1790914420914-efcfc7e0fbe3"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/app/layout-07f09238d9ce6110.js",
+              "status": 200,
+              "ttfbMs": 57,
+              "bytes": 15617,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "484",
+              "xVercelId": "fra1::d6497-1790914420971-fa9c066fe65d"
+            },
+            {
+              "url": "https://www.webagencycrema.com/_next/static/chunks/polyfills-42372ed130431b0a.js",
+              "status": 200,
+              "ttfbMs": 53,
+              "bytes": 112594,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "222",
+              "xVercelId": "fra1::d6497-1790914421026-adfb55ac27f7"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "salento",
+      "label": "Web Agency Salento",
+      "base": "https://www.webagencysalento.com",
+      "pagine": [
+        {
+          "path": "/",
+          "htmlBytes": 186446,
+          "assetReferenziati": 20,
+          "assetUnici": 20,
+          "totaleByte": 935899,
+          "perTipo": {
+            "media": {
+              "n": 4,
+              "bytes": 140756
+            },
+            "css": {
+              "n": 3,
+              "bytes": 105776
+            },
+            "chunks": {
+              "n": 13,
+              "bytes": 689367
+            }
+          },
+          "ttfbAsset": {
+            "min": 72,
+            "mediana": 206,
+            "max": 381
+          },
+          "headerModalita": {
+            "cacheControl": [
+              "public,max-age=31536000,immutable"
+            ],
+            "xVercelCache": [
+              "MISS",
+              "HIT"
+            ],
+            "agePresente": 20
+          },
+          "campioni": [
+            {
+              "url": "https://www.webagencysalento.com/_next/static/media/22a5144ee8d83bca-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 180,
+              "bytes": 29288,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::vwfsx-1790914421427-610171636f87"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/media/4c9affa5bc8f420e-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 345,
+              "bytes": 24576,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::m7m77-1790914421706-f0cc40e2e83a"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/media/e4af272ccee01ff0-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 211,
+              "bytes": 48432,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::xcl2l-1790914421955-9a4e8afcff89"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/media/eaead17c7dbfcd5d-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 200,
+              "bytes": 38460,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::m7m77-1790914422203-0a057b1bb4c7"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/css/7c92785e7fe793c8.css",
+              "status": 200,
+              "ttfbMs": 181,
+              "bytes": 7401,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::8rhdg-1790914422407-f8e0e9a0067e"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/css/58b9e2199395fdb5.css",
+              "status": 200,
+              "ttfbMs": 239,
+              "bytes": 83026,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::rlvs5-1790914422593-5990fdd5eb48"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/css/839dcd6f14ecb8b9.css",
+              "status": 200,
+              "ttfbMs": 217,
+              "bytes": 15349,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::x77z2-1790914422830-c9d366f6e1ad"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/webpack-7381efbe0aaa618b.js",
+              "status": 200,
+              "ttfbMs": 192,
+              "bytes": 3356,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::l7bxm-1790914423048-fe88b0960168"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/4bd1b696-0562a75e9b1eb3c3.js",
+              "status": 200,
+              "ttfbMs": 381,
+              "bytes": 201060,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::8crtn-1790914423240-873e5e5cedd4"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/3794-e7f5565941eebed7.js",
+              "status": 200,
+              "ttfbMs": 279,
+              "bytes": 241399,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::qmbfg-1790914423657-24117853bbf8"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/main-app-dbe42c91161794d9.js",
+              "status": 200,
+              "ttfbMs": 72,
+              "bytes": 923,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "649",
+              "xVercelId": "fra1::stbk5-1790914423980-c3583786f1cb"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/8500-e4dd1cb1bb626827.js",
+              "status": 200,
+              "ttfbMs": 193,
+              "bytes": 8665,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::449l6-1790914424046-02361fd000fa"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/7411-201220a67fb72fec.js",
+              "status": 200,
+              "ttfbMs": 189,
+              "bytes": 16008,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::p9xfn-1790914424241-dccc33992d4e"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/8931-c8fd9c0173cc51a2.js",
+              "status": 200,
+              "ttfbMs": 215,
+              "bytes": 7664,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::lk2nv-1790914424429-98b129d7472b"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/7107-11af349dccbad968.js",
+              "status": 200,
+              "ttfbMs": 222,
+              "bytes": 54345,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::j6mpz-1790914424646-f77d928e3253"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/app/layout-a7ccf5c2bc342596.js",
+              "status": 200,
+              "ttfbMs": 201,
+              "bytes": 16670,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::gcnqf-1790914424871-2d20ba4cfabe"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/7524-9670c8025e5ae6cd.js",
+              "status": 200,
+              "ttfbMs": 264,
+              "bytes": 11484,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::gcnqf-1790914425088-941a136edc3e"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/6354-fe40836b58b40043.js",
+              "status": 200,
+              "ttfbMs": 174,
+              "bytes": 13516,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::j6mpz-1790914425339-1e578a40075e"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/app/page-5b6f592eee0792b7.js",
+              "status": 200,
+              "ttfbMs": 194,
+              "bytes": 1683,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::z75hc-1790914425514-c30918df6338"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/polyfills-42372ed130431b0a.js",
+              "status": 200,
+              "ttfbMs": 267,
+              "bytes": 112594,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::z75hc-1790914425709-3c3dac93d8a9"
+            }
+          ]
+        },
+        {
+          "path": "/seo-salento",
+          "htmlBytes": 60223,
+          "assetReferenziati": 20,
+          "assetUnici": 20,
+          "totaleByte": 937561,
+          "perTipo": {
+            "media": {
+              "n": 4,
+              "bytes": 140756
+            },
+            "css": {
+              "n": 3,
+              "bytes": 105776
+            },
+            "chunks": {
+              "n": 13,
+              "bytes": 691029
+            }
+          },
+          "ttfbAsset": {
+            "min": 48,
+            "mediana": 55,
+            "max": 240
+          },
+          "headerModalita": {
+            "cacheControl": [
+              "public,max-age=31536000,immutable"
+            ],
+            "xVercelCache": [
+              "HIT",
+              "MISS"
+            ],
+            "agePresente": 20
+          },
+          "campioni": [
+            {
+              "url": "https://www.webagencysalento.com/_next/static/media/22a5144ee8d83bca-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 29288,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "4",
+              "xVercelId": "fra1::z9gmz-1790914426092-f18543a4a929"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/media/4c9affa5bc8f420e-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 24576,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "4",
+              "xVercelId": "fra1::ql6sl-1790914426149-1df4bdb579e3"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/media/e4af272ccee01ff0-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 48432,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "4",
+              "xVercelId": "fra1::mb6d5-1790914426208-308869cc78e7"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/media/eaead17c7dbfcd5d-s.p.woff2",
+              "status": 200,
+              "ttfbMs": 58,
+              "bytes": 38460,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "3",
+              "xVercelId": "fra1::x5457-1790914426273-8a7a50a53f46"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/css/7c92785e7fe793c8.css",
+              "status": 200,
+              "ttfbMs": 56,
+              "bytes": 7401,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "3",
+              "xVercelId": "fra1::8crtn-1790914426331-b81398b5228f"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/css/58b9e2199395fdb5.css",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 83026,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "3",
+              "xVercelId": "fra1::nj9gl-1790914426389-d3459d834a48"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/css/839dcd6f14ecb8b9.css",
+              "status": 200,
+              "ttfbMs": 48,
+              "bytes": 15349,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "3",
+              "xVercelId": "fra1::8crtn-1790914426446-d7e5c7d65e09"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/webpack-7381efbe0aaa618b.js",
+              "status": 200,
+              "ttfbMs": 59,
+              "bytes": 3356,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "3",
+              "xVercelId": "fra1::9q2dn-1790914426496-40b398f8c60b"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/4bd1b696-0562a75e9b1eb3c3.js",
+              "status": 200,
+              "ttfbMs": 52,
+              "bytes": 201060,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "3",
+              "xVercelId": "fra1::nj9gl-1790914426555-21f2ed7849f7"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/3794-e7f5565941eebed7.js",
+              "status": 200,
+              "ttfbMs": 58,
+              "bytes": 241399,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "2",
+              "xVercelId": "fra1::hslkr-1790914426612-91198cb5b0a9"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/main-app-dbe42c91161794d9.js",
+              "status": 200,
+              "ttfbMs": 53,
+              "bytes": 923,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "652",
+              "xVercelId": "fra1::xkkmp-1790914426676-2ddff8544a13"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/8500-e4dd1cb1bb626827.js",
+              "status": 200,
+              "ttfbMs": 51,
+              "bytes": 8665,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "2",
+              "xVercelId": "fra1::r2djc-1790914426728-5ba4e0e9892e"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/7107-11af349dccbad968.js",
+              "status": 200,
+              "ttfbMs": 51,
+              "bytes": 54345,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "1",
+              "xVercelId": "fra1::xkkmp-1790914426782-9c24a2820376"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/7524-9670c8025e5ae6cd.js",
+              "status": 200,
+              "ttfbMs": 66,
+              "bytes": 11484,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "1",
+              "xVercelId": "fra1::8crtn-1790914426836-4ae24e0dcf23"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/6354-fe40836b58b40043.js",
+              "status": 200,
+              "ttfbMs": 52,
+              "bytes": 13516,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "1",
+              "xVercelId": "fra1::8crtn-1790914426906-966a8c36e6fb"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/app/%5Bslug%5D/page-1adbb21fae739196.js",
+              "status": 200,
+              "ttfbMs": 240,
+              "bytes": 3345,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "MISS",
+              "age": "0",
+              "xVercelId": "fra1::z75hc-1790914426958-a5759587d5a2"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/7411-201220a67fb72fec.js",
+              "status": 200,
+              "ttfbMs": 54,
+              "bytes": 16008,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "2",
+              "xVercelId": "fra1::hslkr-1790914427199-cac4f25dab8b"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/8931-c8fd9c0173cc51a2.js",
+              "status": 200,
+              "ttfbMs": 55,
+              "bytes": 7664,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "2",
+              "xVercelId": "fra1::hslkr-1790914427254-7482996d267f"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/app/layout-a7ccf5c2bc342596.js",
+              "status": 200,
+              "ttfbMs": 50,
+              "bytes": 16670,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "2",
+              "xVercelId": "fra1::j6mpz-1790914427310-acc6b648d047"
+            },
+            {
+              "url": "https://www.webagencysalento.com/_next/static/chunks/polyfills-42372ed130431b0a.js",
+              "status": 200,
+              "ttfbMs": 51,
+              "bytes": 112594,
+              "cacheControl": "public,max-age=31536000,immutable",
+              "xVercelCache": "HIT",
+              "age": "1",
+              "xVercelId": "fra1::j6mpz-1790914427360-a2751367a49a"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

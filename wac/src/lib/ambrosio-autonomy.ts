@@ -54,7 +54,9 @@ export type AmbrosioAccess =
   | "nota_interna"
   | "handoff"
   | "cerca_cliente"
-  | "prepara_proposta";
+  | "prepara_proposta"
+  | "cerca_slot"
+  | "prenota_appuntamento";
 
 /** Descrizioni per la lista accessi mostrata in /admin/operators e /admin/ai/autonomia. */
 export const ACCESS_LABELS: Record<AmbrosioAccess, string> = {
@@ -65,6 +67,8 @@ export const ACCESS_LABELS: Record<AmbrosioAccess, string> = {
   handoff: "Passare il turno a una persona (con motivo e contesto)",
   cerca_cliente: "Consultare il portafoglio clienti (sola lettura)",
   prepara_proposta: "Preparare proposte con preventivo (bozza, sempre revisionata dal team)",
+  cerca_slot: "Consultare gli slot liberi del calendario del team (sola lettura)",
+  prenota_appuntamento: "Fissare appuntamenti sul calendario del team (slot da cerca_slot, consenso esplicito)",
 };
 
 /**
@@ -77,6 +81,7 @@ export const ACCESS_LABELS: Record<AmbrosioAccess, string> = {
 export function accessList(level: AmbrosioLevel): AmbrosioAccess[] {
   const l2: AmbrosioAccess[] = [
     "salva_lead",
+    "cerca_slot",
     "fissa_callback",
     "aggiorna_ticket",
     "nota_interna",
@@ -85,7 +90,7 @@ export function accessList(level: AmbrosioLevel): AmbrosioAccess[] {
   ];
   if (level === 1) return [];
   if (level === 2) return l2;
-  return [...l2, "prepara_proposta"];
+  return [...l2, "prepara_proposta", "prenota_appuntamento"];
 }
 
 export function accessAllowed(level: AmbrosioLevel, fn: string): boolean {

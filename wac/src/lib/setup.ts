@@ -36,6 +36,36 @@ const MIGRATIONS_DIR = path.join(process.cwd(), "neon", "migrations");
 const ENV_FILE = path.join(process.cwd(), ".env.local");
 const LOCK_FILE = path.join(process.cwd(), ".setup-completed");
 
+/**
+ * GUARDIA ANTINCIDENTE (28/09/2026) — l'installatore si rifiuta di procedere
+ * se la cartella dell'app è una docroot di WordPress (o sta dentro public_html):
+ * in quel caso scrivere .env.local, migration e file di lock andrebbe a
+ * mescolarsi ai file del sito principale, e l'app stessa gli starebbe davanti.
+ * Server.js ha la stessa guardia all'avvio: qui copre la corsa del wizard,
+ * che è il momento in cui vengono scritti i file.
+ */
+export function docrootGuard(): { ok: boolean; reason?: string; markers?: string[] } {
+  const dir = process.cwd();
+  const segments = dir.split(path.sep).map((s) => s.toLowerCase());
+  if (segments.includes("public_html") || segments.includes("htdocs")) {
+    return { ok: false, reason: `l'app vive dentro una cartella vietata (public_html/htdocs): ${dir}` };
+  }
+  const markers: string[] = [];
+  try {
+    if (existsSync(path.join(dir, "wp-config.php"))) markers.push("wp-config.php");
+    if (existsSync(path.join(dir, "wp-settings.php"))) markers.push("wp-settings.php");
+    if (existsSync(path.join(dir, "wp-admin"))) markers.push("wp-admin/");
+    if (existsSync(path.join(dir, "wp-includes"))) markers.push("wp-includes/");
+    if (existsSync(path.join(dir, "wp-content"))) markers.push("wp-content/");
+  } catch {
+    // permessi parziali: bastano quelli visti
+  }
+  if (markers.length >= 2) {
+    return { ok: false, reason: `la cartella contiene un'installazione WordPress: ${dir}`, markers };
+  }
+  return { ok: true };
+}
+
 /** Errori Postgres che su migration additive significano «già applicata». */
 const ALREADY_RE = /already exists|duplicate key value violates unique constraint/i;
 /** CREATE RULE senza IF NOT EXISTS: ricadono qui su uno schema esistente. */
@@ -406,6 +436,19 @@ export async function runInstall(input: InstallInput): Promise<InstallResult> {
   const logs: StepLog[] = [];
   const log = (step: string, level: LogLevel, message: string) =>
     logs.push({ step, level, message, at: new Date().toISOString() });
+
+  /* 0 — guardia docroot: MAI installare dentro WordPress/public_html. */
+  const guard = docrootGuard();
+  if (!guard.ok) {
+    log(
+      "guard",
+      "error",
+      `Installazione rifiutata: ${guard.reason}. ` +
+        "Procedura corretta: crea un sottodominio dedicato con docroot propria " +
+        "(cPanel → Domains) e registra lì l'app — vedi DEPLOY-CPANEL.md Parte 0.",
+    );
+    return { ok: false, error: `Docroot non sicura: ${guard.reason}`, logs };
+  }
 
   markInProgress();
 

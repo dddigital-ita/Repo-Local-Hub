@@ -1,0 +1,118 @@
+#!/bin/sh
+# PRE-COMMIT GUARD — manifest e lockfile devono raccontare la stessa storia.
+#
+# Se package.json e package-lock.json divergono, ogni installazione pulita
+# (deploy, CI, collega nuovo) costruisce un albero diverso da quello che hai
+# in testa: `npm ci` fallisce, `npm install` risolve in silenzio. Meglio
+# scoprirlo qui che al deploy. Esito 1 -> commit bloccato.
+#
+# Verifica (a doppia direzione, solo per le dependencies del manifest):
+#   1. ogni dipendenza dichiarata esiste nel lockfile, non marcata come dev;
+#   2. la versione bloccata soddisfa il range del manifest (^, ~, esatto,
+#      comparatori semplici — i casi che npm produce davvero).
+#
+# Perimetro onesto: controlla i file sul disco quando package.json o
+# package-lock.json sono tra i file staged (il caso comune: si commette
+# quello che si vede); lo stato globale dell'albero e' coperto dalla
+# sentinella in `npm test` (tests/deps.test.mjs).
+#
+# Attivazione: `npm install` imposta core.hooksPath via postinstall
+# (vedi package.json). Per saltarlo in emergenza cosciente:
+#   git commit --no-verify
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Node assente (checkout inusuale): non bloccare, la sentinella in CI copre.
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: node assente, sincronismo manifest/lockfile non verificato" >&2
+  exit 0
+fi
+
+# L'hook interviene solo se il commit tocca manifest o lockfile: gli altri
+# commit non devono pagarne il costo.
+STAGED="$(git diff --cached --name-only -- package.json package-lock.json)"
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+if [ ! -f package.json ] || [ ! -f package-lock.json ]; then
+  echo "pre-commit: package.json o package-lock.json mancanti, controllo saltato" >&2
+  exit 0
+fi
+
+echo "pre-commit: sincronismo manifest/lockfile..."
+
+#Il check gira in Node: niente dipendenze esterne, stessa logica della sentinella.
+node -e '
+const fs = require("fs");
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+const lock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
+const problems = [];
+
+// Confronto semantico di triple [M,m,p] (stessa logica di tests/deps.test.mjs).
+function cmp(a, b) {
+  const A = a.split(/[.\-+]/).map(Number), B = b.split(/[.\-+]/).map(Number);
+  for (let i = 0; i < Math.max(A.length, B.length); i++) {
+    const d = (A[i] || 0) - (B[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+// Soddisfa una clausola semplice: ^x.y.z, ~x.y.z, esatto, comparatori.
+function satClausola(v, c) {
+  c = c.trim();
+  if (!c || c === "*" || c === "latest" || c.includes("workspace:")) return true;
+  const numeri = c.match(/\d+(\.\d+){0,2}/);
+  if (!numeri) return true; // tag o forme particolari: non giudicabile
+  const parti = numeri[0].split(".").map(Number);
+  const [M = 0, m = 0, p = 0] = parti;
+  const lo = `${M}.${m}.${p}`;
+  if (c.startsWith("^")) {
+    // ^0.2.3 → <0.3.0, ^0.0.3 → <0.0.4, ^1 → <2.0.0 (primo nonzero)
+    let hi;
+    if (M > 0 || parti.length === 1) hi = `${M + 1}.0.0`;
+    else if (m > 0 || parti.length === 2) hi = `0.${m + 1}.0`;
+    else hi = `0.0.${p + 1}`;
+    return cmp(v, lo) >= 0 && cmp(v, hi) < 0;
+  }
+  if (c.startsWith("~")) {
+    const hi = parti.length === 1 ? `${M + 1}.0.0` : `${M}.${m + 1}.0`;
+    return cmp(v, lo) >= 0 && cmp(v, hi) < 0;
+  }
+  if (/^\d/.test(c)) return cmp(v, lo) === 0;           // esatto
+  if (c.startsWith(">=")) return cmp(v, lo) >= 0;
+  if (c.startsWith(">")) return cmp(v, lo) > 0;
+  if (c.startsWith("<=")) return cmp(v, lo) <= 0;
+  if (c.startsWith("<")) return cmp(v, lo) < 0;
+  return true; // forme composte strane: non giudicabile qui
+}
+
+// Range completo: alternative "||" in OR, clausole separate da spazio in AND.
+function sat(v, range) {
+  return String(range).split("||").some((alt) =>
+    alt.trim().split(/\s+/).every((c) => satClausola(v, c)),
+  );
+}
+
+const deps = { ...pkg.dependencies, ...pkg.optionalDependencies };
+for (const [name, range] of Object.entries(deps)) {
+  const entry = lock.packages && lock.packages[`node_modules/${name}`];
+  if (!entry) { problems.push(`${name}: dichiarato nel manifest, assente nel lockfile`); continue; }
+  if (entry.dev) problems.push(`${name}: dependency del manifest ma marcata "dev" nel lockfile`);
+  const v = entry.version || "";
+  if (!sat(v, range)) problems.push(`${name}: lockfile ${v || "?"} non soddisfa il range del manifest "${range}"`);
+}
+
+if (problems.length) {
+  console.error("pre-commit: package.json e package-lock.json NON sono sincroni:");
+  for (const p of problems) console.error("  - " + p);
+  console.error("Correggi con: npm install (poi ri-aggiungi i file). Per saltare a rischio tuo: git commit --no-verify");
+  process.exit(1);
+}
+'
+
+echo "pre-commit: manifest e lockfile sincroni ✓"

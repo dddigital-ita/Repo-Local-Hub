@@ -1,0 +1,253 @@
+{
+  "fase": "pre-0.8.0",
+  "quando": "02/10/26, 02:32",
+  "generato": "2026-10-02T00:32:21.752Z",
+  "campioni": 5,
+  "attesaSec": 0,
+  "misuratoDa": "192.168.1.7",
+  "cookiePresente": false,
+  "siti": [
+    {
+      "key": "crema",
+      "label": "WebAgencyCrema",
+      "base": "https://www.webagencycrema.com",
+      "pagine": [
+        {
+          "path": "/",
+          "n": 5,
+          "min": 479,
+          "mediana": 498,
+          "max": 2383,
+          "media": 870,
+          "funzione": "iad1",
+          "cache": "MISS",
+          "campioni": [
+            {
+              "ttfbMs": 2383,
+              "totalMs": 2475,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::iad1::6969t-1790901141966-f81916d5ea0d",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:24.229Z"
+            },
+            {
+              "ttfbMs": 498,
+              "totalMs": 593,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::iad1::jgwg9-1790901144504-9539e1ba7b7c",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:25.073Z"
+            },
+            {
+              "ttfbMs": 502,
+              "totalMs": 602,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::iad1::vsqrf-1790901145348-dab279744b37",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:25.926Z"
+            },
+            {
+              "ttfbMs": 488,
+              "totalMs": 577,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::iad1::s9hrz-1790901146201-70211e92383f",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:26.754Z"
+            },
+            {
+              "ttfbMs": 479,
+              "totalMs": 481,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::iad1::qphvc-1790901147031-56823170b425",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:27.486Z"
+            }
+          ]
+        },
+        {
+          "path": "/seo-crema",
+          "n": 5,
+          "min": 64,
+          "mediana": 69,
+          "max": 197,
+          "media": 101,
+          "funzione": "xcl2l-1790901147762-1165642ec963",
+          "cache": "HIT",
+          "campioni": [
+            {
+              "ttfbMs": 69,
+              "totalMs": 70,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::xcl2l-1790901147762-1165642ec963",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:27.807Z"
+            },
+            {
+              "ttfbMs": 197,
+              "totalMs": 198,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::khxwd-1790901148088-df4dec4468d1",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:28.257Z"
+            },
+            {
+              "ttfbMs": 105,
+              "totalMs": 107,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::khxwd-1790901148540-4e02b710deb5",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:28.615Z"
+            },
+            {
+              "ttfbMs": 69,
+              "totalMs": 70,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::khxwd-1790901148891-79ff13028e88",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:28.936Z"
+            },
+            {
+              "ttfbMs": 64,
+              "totalMs": 66,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::xcl2l-1790901149212-abd156487807",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:29.253Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "salento",
+      "label": "Web Agency Salento",
+      "base": "https://www.webagencysalento.com",
+      "pagine": [
+        {
+          "path": "/",
+          "n": 5,
+          "min": 111,
+          "mediana": 122,
+          "max": 1184,
+          "media": 350,
+          "funzione": "fra1",
+          "cache": "MISS",
+          "campioni": [
+            {
+              "ttfbMs": 1184,
+              "totalMs": 1189,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::fra1::r2n52-1790901149633-2743d698aa59",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:30.693Z"
+            },
+            {
+              "ttfbMs": 122,
+              "totalMs": 140,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::fra1::wj7s9-1790901150968-6fb3765aab10",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:31.084Z"
+            },
+            {
+              "ttfbMs": 216,
+              "totalMs": 221,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::fra1::nbjv4-1790901151359-e454ed9bd3c6",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:31.556Z"
+            },
+            {
+              "ttfbMs": 117,
+              "totalMs": 121,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::fra1::6pt27-1790901151831-c94f6ca12877",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:31.927Z"
+            },
+            {
+              "ttfbMs": 111,
+              "totalMs": 117,
+              "status": 200,
+              "cache": "MISS",
+              "vercelId": "fra1::fra1::qcvfz-1790901152202-ccc2c279c6ef",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:32.296Z"
+            }
+          ]
+        },
+        {
+          "path": "/seo-salento",
+          "n": 5,
+          "min": 66,
+          "mediana": 78,
+          "max": 88,
+          "media": 76,
+          "funzione": "mt8zx-1790901152569-c7ada8cc1f44",
+          "cache": "HIT",
+          "campioni": [
+            {
+              "ttfbMs": 72,
+              "totalMs": 73,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::mt8zx-1790901152569-c7ada8cc1f44",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:32.619Z"
+            },
+            {
+              "ttfbMs": 78,
+              "totalMs": 80,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::ms888-1790901152893-599d1125e375",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:32.950Z"
+            },
+            {
+              "ttfbMs": 88,
+              "totalMs": 89,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::6cjjd-1790901153224-726cdbc94a40",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:33.290Z"
+            },
+            {
+              "ttfbMs": 78,
+              "totalMs": 80,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::gnnst-1790901153564-42c5e663b9f2",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:33.621Z"
+            },
+            {
+              "ttfbMs": 66,
+              "totalMs": 68,
+              "status": 200,
+              "cache": "HIT",
+              "vercelId": "fra1::gnnst-1790901153895-52a9e4580b8b",
+              "versoLogin": false,
+              "at": "2026-10-02T00:32:33.939Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

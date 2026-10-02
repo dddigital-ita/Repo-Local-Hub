@@ -27,7 +27,12 @@ import {
   resolveClientNamePure,
   withBudgetTotal,
   byBudgetDesc,
+  clientTypePure,
+  clientTypeLabelPure,
+  dittaSuggeritaPure,
 } from "./clients-shared";
+
+import { likeContains } from "./tickets-shared";
 
 export const CLIENTS_SYNC_KEY = "clients_sync_enabled";
 
@@ -51,6 +56,8 @@ export interface ClientRow {
   synced_at: string | null;
   /** Marcatura anti-doppioni Notion (027, come leads.notion_synced_at). */
   notion_synced_at: string | null;
+  /** Tipo cliente (038): azienda | privato | ente_pubblico, null = da classificare. */
+  client_type: string | null;
   /** Riepilogo canali distinti: «web · email» (da array_agg del sync). */
   channels: string[] | null;
   ticket_count: number;
@@ -59,21 +66,46 @@ export interface ClientRow {
   budgets: string[] | null;
   /** Somma euristica dei budget numerici trovati (€), null se nessuno. */
   budget_total: number | null;
+  /** Ditta citata nei lead ma non in scheda: proposta, mai scrittura (038/039). */
+  azienda_suggerita?: string | null;
+  /** Quante citazioni distinte sostengono la proposta. */
+  azienda_suggerita_citazioni?: number;
+  /** Ditte citate nei lead (grezzo, per il calcolo del suggerimento). */
+  ditte_citate?: { company_name: string; n: number }[] | null;
+  /** Ditte rigettate dall'operatore (jsonb 039, array serializzato). */
+  ditte_rigettate?: string | null;
 }
 
 export interface ClientTicketRow {
   id: string;
   number: number;
+  initial_query: string | null;
+  source_page: string | null;
   status: string;
   priority: string;
   channel: string | null;
-  initial_query: string | null;
   created_at: string;
   updated_at: string;
+  first_response_at: string | null;
+  /** Archiviazione soft (spam): il banner di ripristino è della inbox, qui
+   *  la riga la porta solo per compatibilità con TicketRow. */
+  archived_at: string | null;
   last_sender: string | null;
   /** Telefono WhatsApp DEL ticket (lead.wa_phone), se il canale lo porta:
    *  serve al link WhatsApp contestuale della scheda cliente. */
   wa_phone: string | null;
+  /** Colonne allineate a TicketRow (lib/tickets.ts) per riusare
+   *  TicketQueueRow: assegnatario, contatti, conteggio messaggi, SLA e
+   *  preview dell'ultimo messaggio. */
+  assigned_to: string | null;
+  assigned_name: string | null;
+  contact_email?: string | null;
+  lead_name: string | null;
+  lead_phone: string | null;
+  lead_source: string | null;
+  message_count: string;
+  last_message_body?: string | null;
+  sla_next_reply_due?: string | null;
 }
 
 export interface ClientDetail extends ClientRow {
@@ -300,19 +332,30 @@ const TICKETS_AGG_SQL = `
   (select array_agg(distinct l3.budget) from client_conversations cc4
     join conversations c4 on c4.id = cc4.conversation_id
     join leads l3 on l3.id = c4.lead_id
-    where cc4.client_id = cl.id and l3.budget is not null) as budgets`;
+    where cc4.client_id = cl.id and l3.budget is not null) as budgets,
+  (select json_agg(row_to_json(d)) from (
+    select l5.company_name, count(*)::int as n
+    from client_conversations cc5
+    join conversations c6 on c6.id = cc5.conversation_id
+    join leads l5 on l5.id = c6.lead_id
+    where cc5.client_id = cl.id and l5.company_name is not null and l5.company_name <> ''
+    group by l5.company_name
+  ) d) as ditte_citate,
+  (select cm.value->>'ditte_rigettate' from client_meta cm where cm.client_id = cl.id) as ditte_rigettate`;
 
 const CLIENTS_SELECT = `select cl.id, cl.name, cl.phone_e164, cl.email_norm, cl.contact_email,
-        cl.company_name, cl.notes, cl.first_seen_at, cl.last_seen_at, cl.synced_at, cl.notion_synced_at,
+        cl.company_name, cl.notes, cl.client_type, cl.first_seen_at, cl.last_seen_at, cl.synced_at, cl.notion_synced_at,
         ${TICKETS_AGG_SQL}
      from clients cl`;
 
-/** Lista del portafoglio: ricerca su nome/email/telefono/ditta, filtro «con ticket aperti», ultimi visti prima — o budget decrescente con sort=budget. */
+/** Lista del portafoglio: ricerca su nome/email/telefono/ditta, filtro «con ticket aperti», tipo cliente, aziende senza ditta, ultimi visti prima — o budget decrescente con sort=budget. */
 export async function listClients(
   q?: string,
   limit = 200,
   openOnly = false,
   sort?: string,
+  tipo?: string,
+  senzaDitta = false,
 ): Promise<ClientRow[]> {
   const pool = db();
   if (!pool) return [];
@@ -321,7 +364,9 @@ export async function listClients(
     const wheres: string[] = [];
     const term = q?.trim();
     if (term) {
-      params.push(`%${term}%`);
+      // Stessa regola della inbox: wildcard dell'utente letteralizzati
+      // (likeContains in tickets-shared, un solo costruttore di pattern).
+      params.push(likeContains(term));
       wheres.push(`(cl.name ilike $${params.length} or cl.email_norm ilike $${params.length} or cl.phone_e164 ilike $${params.length} or cl.company_name ilike $${params.length})`);
     }
     if (openOnly) {
@@ -330,6 +375,27 @@ export async function listClients(
                  join conversations c5 on c5.id = cco.conversation_id
                  where cco.client_id = cl.id and c5.status not in ('closed','on_hold','bot'))`,
       );
+    }
+    // Segmento di qualità «aziende senza ditta»: classificate azienda ma
+    // senza ragione sociale — le schede da completare. Quando attivo è LUI
+    // il filtro (tipo implicito = azienda): le due condizioni viaggiano
+    // insieme o non è il segmento che dice di essere.
+    if (senzaDitta) {
+      wheres.push("cl.client_type = 'azienda' and cl.company_name is null");
+    } else {
+    // Filtro tipo: SOLO valori del contratto condiviso (clientTypePure) —
+    // un ?tipo= manomesso non diventa mai una clausola SQL. «nessuno» =
+    // le schede ancora da classificare (client_type is null).
+    const tipoFiltro = tipo?.trim();
+    if (tipoFiltro === "nessuno") {
+      wheres.push("cl.client_type is null");
+    } else {
+      const tipoValido = clientTypePure(tipoFiltro);
+      if (tipoValido) {
+        params.push(tipoValido);
+        wheres.push(`cl.client_type = $${params.length}`);
+      }
+    }
     }
     params.push(String(limit));
     const where = wheres.length ? ` where ${wheres.join(" and ")}` : "";
@@ -340,6 +406,18 @@ export async function listClients(
       params,
     );
     const clients = rows.map(withBudgetTotal);
+    // Il suggerimento ditta vive anche in LISTA (completamento rapido senza
+    // aprire la scheda): stessa regola pura del dettaglio, stesso confronto
+    // con i rigetti 039. Le righe senza proposta restano intatte.
+    for (const c of clients) {
+      const s = dittaSuggeritaPure(
+        c.ditte_citate ?? null,
+        c.company_name,
+        c.ditte_rigettate ? JSON.parse(c.ditte_rigettate) : null,
+      );
+      c.azienda_suggerita = s.ditta;
+      c.azienda_suggerita_citazioni = s.citazioni;
+    }
     // «Budget: più alto prima»: ordinamento lato dato sul valore derivato —
     // la regola vive nel layer condiviso testato, non nella pagina.
     return sort === "budget" ? clients.sort(byBudgetDesc) : clients;
@@ -355,10 +433,17 @@ export async function listClients(
 // usi esistenti della pagina.
 export { withBudgetTotal } from "./clients-shared";
 
-/** KPI della lista: schede totali, con telefono, con email, aziende. */
-export async function countClients(): Promise<{ total: number; withPhone: number; withEmail: number; companies: number }> {
+/** KPI della lista: schede totali, con telefono, con email, aziende, per tipo + aziende senza ditta. */
+export async function countClients(): Promise<{
+  total: number;
+  withPhone: number;
+  withEmail: number;
+  companies: number;
+  aziendeSenzaDitta: number;
+  byType: Record<string, number>;
+}> {
   const pool = db();
-  const empty = { total: 0, withPhone: 0, withEmail: 0, companies: 0 };
+  const empty = { total: 0, withPhone: 0, withEmail: 0, companies: 0, aziendeSenzaDitta: 0, byType: {} as Record<string, number> };
   if (!pool) return empty;
   try {
     const { rows } = await pool.query<{
@@ -366,20 +451,92 @@ export async function countClients(): Promise<{ total: number; withPhone: number
       with_phone: number;
       with_email: number;
       companies: number;
+      aziende_senza_ditta: number;
     }>(
       `select count(*)::int as total,
               count(*) filter (where phone_e164 is not null)::int as with_phone,
               count(*) filter (where email_norm is not null)::int as with_email,
-              count(*) filter (where company_name is not null)::int as companies
+              count(*) filter (where company_name is not null)::int as companies,
+              count(*) filter (where client_type = 'azienda' and company_name is null)::int as aziende_senza_ditta
        from clients`,
     );
+    const perTipo = await pool.query<{ client_type: string | null; n: number }>(
+      `select client_type, count(*)::int as n from clients group by client_type`,
+    );
+    const byType: Record<string, number> = {};
+    for (const r of perTipo.rows) {
+      // La UI parla la lingua del dizionario condiviso: le chiavi sconosciute
+      // (tipo rimosso dal codice ma in DB) restano conteggiate col valore grezzo.
+      byType[r.client_type ?? "nessuno"] = r.n;
+    }
     const r = rows[0];
     return r
-      ? { total: r.total, withPhone: r.with_phone, withEmail: r.with_email, companies: r.companies }
-      : empty;
+      ? {
+          total: r.total,
+          withPhone: r.with_phone,
+          withEmail: r.with_email,
+          companies: r.companies,
+          aziendeSenzaDitta: r.aziende_senza_ditta,
+          byType,
+        }
+      : { ...empty, byType };
   } catch {
     return empty;
   }
+}
+
+/** Etichetta tipo per la UI: dal dizionario condiviso, NULL → «Da classificare». */
+export function clientTypeLabel(t: string | null | undefined): string {
+  return clientTypeLabelPure(t);
+}
+
+/**
+ * Rigetta una ditta proposta: il «no» dell'operatore resta in client_meta
+ * (039) e il suggerimento non riparte per quella ditta. Diverso dal lasciare
+ * il banner lì: rigettare è una decisione, e va ricordata.
+ */
+export async function rejectClientDitta(id: string, ditta: string, actor: string): Promise<boolean> {
+  const pool = db();
+  if (!pool) return false;
+  const nome = ditta.trim().slice(0, 120);
+  if (!nome) return false;
+  await pool.query(
+    // Nota SQL: to_jsonb(ARRAY[$2]::text[]) e NON to_jsonb($2::text[]) —
+    // la seconda interpreta la stringa come letterale array e esplode con
+    // «malformed array literal» (beccato in E2E, non amano le sorprese).
+    `insert into client_meta (client_id, value) values ($1, jsonb_build_object('ditte_rigettate', to_jsonb(ARRAY[$2]::text[])))
+     on conflict (client_id) do update set
+       value = jsonb_set(
+         client_meta.value,
+         '{ditte_rigettate}',
+         (
+           select coalesce(jsonb_agg(distinct d), '[]'::jsonb)
+           from jsonb_array_elements_text(
+             coalesce(client_meta.value->'ditte_rigettate', '[]'::jsonb)
+             || to_jsonb(ARRAY[$2]::text[])
+           ) as d
+         ),
+         true
+       ),
+       updated_at = now()`,
+    [id, nome],
+  );
+  await logAudit(actor, "client.ditta-rigettata", id, nome);
+  return true;
+}
+
+/** Scrive il tipo in scheda (action dedicata): solo valori del contratto, null per svuotare. */
+export async function setClientType(id: string, tipo: string | null, actor: string): Promise<boolean> {
+  const pool = db();
+  if (!pool) return false;
+  const valido = clientTypePure(tipo);
+  if (tipo && !valido) return false;
+  const { rowCount } = await pool.query(
+    "update clients set client_type = $2, updated_at = now() where id = $1",
+    [id, valido],
+  );
+  await logAudit(actor, "client.tipo", id, valido ?? "da classificare");
+  return (rowCount ?? 0) > 0;
 }
 
 /**
@@ -420,13 +577,29 @@ export async function getClient(id: string): Promise<ClientDetail | null> {
     const { rows } = await pool.query<ClientRow>(`${CLIENTS_SELECT} where cl.id = $1`, [id]);
     const client = rows[0];
     if (!client) return null;
+    // Il suggerimento è una PROPOSTA calcolata al volo (confronto citazioni
+    // ↔ ditta salvata ↔ rigetti 039): mai una colonna che "scatta" da sola.
+    const suggerimento = dittaSuggeritaPure(client.ditte_citate ?? null, client.company_name, client.ditte_rigettate ? JSON.parse(client.ditte_rigettate) : null);
+    client.azienda_suggerita = suggerimento.ditta;
+    client.azienda_suggerita_citazioni = suggerimento.citazioni;
+    // RIGHE TICKET ALLINEATE a TicketRow (lib/tickets.ts): la scheda cliente
+    // riusa TicketQueueRow, quindi serve lo stesso set di colonne della inbox
+    // (SLA, contatto, conteggio messaggi, assegnatario, preview). La colonna
+    // in più rispetto a TicketRow resta wa_phone: la pagina costruisce il
+    // link WhatsApp contestuale per ticket.
     const tickets = await pool.query<ClientTicketRow>(
-      `select c.id, c.number, c.status, c.priority, c.channel, c.initial_query, c.created_at, c.updated_at,
-              l.wa_phone,
-              (select m2.sender from messages m2 where m2.conversation_id = c.id order by m2.created_at desc limit 1) as last_sender
+      `select c.id, c.number, c.initial_query, c.source_page, c.status, c.priority, c.channel,
+              c.created_at, c.updated_at, c.first_response_at, c.archived_at,
+              c.assigned_to, o.first_name as assigned_name, c.contact_email,
+              l.name as lead_name, l.phone as lead_phone, l.source as lead_source, l.wa_phone,
+              c.sla_next_reply_due,
+              (select count(*) from messages m where m.conversation_id = c.id) as message_count,
+              (select m2.sender from messages m2 where m2.conversation_id = c.id order by m2.created_at desc limit 1) as last_sender,
+              (select m3.body from messages m3 where m3.conversation_id = c.id order by m3.created_at desc limit 1) as last_message_body
        from client_conversations cc
        join conversations c on c.id = cc.conversation_id
        left join leads l on l.id = c.lead_id
+       left join operators o on o.id = c.assigned_to
        where cc.client_id = $1
        order by c.updated_at desc
        limit 50`,

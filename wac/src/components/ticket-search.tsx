@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Search, X } from "lucide-react";
 
@@ -25,6 +25,23 @@ export default function TicketSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Scorciatoia «/» (revisione UX §2.2): da qualunque punto della inbox
+  // preme «/» e la ricerca si apre con focus — il keyboard-first di Zendesk.
+  // SOLO su eventi da tastiera «nude» (niente modificatori e niente campi
+  // già concentrati: «/» in un composer o in una casella è testo, non comando).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || (el as HTMLElement).isContentEditable)) return;
+      e.preventDefault();
+      setOpen(true);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // Con query attiva la casella resta aperta: il valore è DERIVATO da `q`,
   // quindi non serve sincronizzarlo in effect (l'utente può sempre riaprire).
   const openDerived = open || Boolean(q);
@@ -44,9 +61,11 @@ export default function TicketSearch({
             setOpen(true);
             requestAnimationFrame(() => inputRef.current?.focus());
           }}
+          title="Cerca ticket (scorciatoia: /)"
         >
           <Search className="h-4 w-4" aria-hidden />
           Cerca
+          <kbd className="ml-0.5 rounded border border-slate-200/80 bg-white/80 px-1 font-sans text-[10px] font-semibold text-slate-500">/</kbd>
         </button>
       ) : (
         <form

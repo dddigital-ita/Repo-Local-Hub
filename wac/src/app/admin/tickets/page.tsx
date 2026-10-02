@@ -1,24 +1,22 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, Inbox, Mail, MessageSquare, Plus, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Inbox, Mail, MessageSquare, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import {
   countTickets,
   countTicketsByChannel,
+  getTicketTagCounts,
   listTickets,
   listArchivedTickets,
   FILTERS,
-  PRIORITY_LABEL,
-  PRIORITY_TONE,
-  STATUS_LABEL,
-  STATUS_TONE,
-  awaitsReply,
-  slaTier,
+  waTicketHref,
   type TicketFilter,
 } from "@/lib/tickets";
+import { TAG_TONE } from "@/lib/tickets-shared";
 import ArchivedTicketsBanner from "@/components/archived-tickets-banner";
-import TicketCardActions from "@/components/ticket-card-actions";
+import TicketBulkBar from "@/components/ticket-bulk-bar";
+import TicketQueueRow from "@/components/tickets/TicketQueueRow";
 import TicketSearch from "@/components/ticket-search";
 import { GlassButton, GlassLinkButton, GlassNotice } from "@/components/glass";
 import { syncEmailIngestAction } from "@/app/admin/actions";
@@ -66,9 +64,9 @@ const CHANNEL_ICON_FALLBACK = MessageSquare;
 export default async function TicketsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ f?: string; t?: string; q?: string; channel?: string; page?: string; sync?: string }>;
+  searchParams: Promise<{ f?: string; t?: string; q?: string; channel?: string; page?: string; sync?: string; bulk?: string; tag?: string }>;
 }) {
-  const { f, t, q, channel: channelParam, page: pageParam, sync } = await searchParams;
+  const { f, t, q, channel: channelParam, page: pageParam, sync, bulk: bulkFeedback, tag: tagParam } = await searchParams;
 
   // Legacy: i vecchi link /admin/tickets?t=… ora puntano alla pagina dedicata.
   if (t) redirect(`/admin/tickets/${t}`);
@@ -80,14 +78,21 @@ export default async function TicketsPage({
 
   const filter: TicketFilter = (FILTERS.find((x) => x.key === f)?.key ?? "aperti") as TicketFilter;
   // Canale: solo valori presenti nel DB (validati contro i conteggi, non interpolati dal client).
-  const channelCounts = await countTicketsByChannel();
+  // Tag: stessa disciplina — il ?tag= vale solo se esiste nella
+  // coda (un tag scritto a mano nell'URL che non c'è più collassa
+  // in «tutti», mai in una pagina vuota silenziosa).
+  const [channelCounts, tagCounts] = await Promise.all([
+    countTicketsByChannel(),
+    getTicketTagCounts(),
+  ]);
   const channel = channelParam && channelParam in channelCounts ? channelParam : "all";
+  const tag = tagParam && tagCounts.some((x) => x.tag === tagParam) ? tagParam : null;
 
   const page = Math.max(1, Math.min(500, Number.parseInt(pageParam ?? "1", 10) || 1));
   // limit+1: la riga in più dice se esiste la pagina successiva senza una
   // seconda query (che dovrebbe ripetere filtro+canale+ricerca per essere veritiera).
   const [ticketRows, counts, archived] = await Promise.all([
-    listTickets(filter, user.operatorId, PAGE_SIZE + 1, q, channel === "all" ? null : channel, page, PAGE_SIZE),
+    listTickets(filter, user.operatorId, PAGE_SIZE + 1, q, channel === "all" ? null : channel, page, PAGE_SIZE, tag),
     countTickets(user.operatorId),
     listArchivedTickets(8),
   ]);
@@ -99,7 +104,7 @@ export default async function TicketsPage({
     // La pagina CORRENTE attraversa i link solo se ≠ 1; cambiare filtro o
     // canale la AZZERA (le tab passano page: undefined dopo il merge) —
     // finire in pagina 3 di un filtro appena scelto sarebbe un cortocircuito.
-    const merged = { f: filter, channel, q, page: page > 1 ? String(page) : undefined, ...over };
+    const merged = { f: filter, channel, q, tag, page: page > 1 ? String(page) : undefined, ...over };
     for (const [k, v] of Object.entries(merged)) if (v && v !== "all") sp.set(k, v);
     const s = sp.toString();
     return `/admin/tickets${s ? `?${s}` : ""}`;
@@ -177,14 +182,69 @@ export default async function TicketsPage({
         </div>
       </header>
 
+      {/* Feedback bulk (?bulk=op:n): il redirect della action porta QUI il
+          risultato — notizia persistente finché l'URL la dice (il toast da
+          2s con testo dinamico non è nel dizionario del toaster). */}
+      {bulkFeedback && (
+        <GlassNotice tone={bulkFeedback.includes(":0") ? "info" : "success"}>
+          {bulkFeedback.startsWith("archive")
+            ? `Archiviati in blocco: ${bulkFeedback.split(":")[1]} ticket`
+            : bulkFeedback.startsWith("close")
+              ? `Chiusi in blocco: ${bulkFeedback.split(":")[1]} ticket`
+              : `Presi in carico in blocco: ${bulkFeedback.split(":")[1]} ticket`}
+        </GlassNotice>
+      )}
       {sync && <GlassNotice>{sync}</GlassNotice>}
 
-      {/* Tab canali (web/email/whatsapp…): le code divise per canale come in Zendesk.
-          Email e WhatsApp sono sempre visibili (anche a 0) — un canale del
-          sistema non può sembrare assente. La lista nasconde gli archiviati. */}
-      {/* py-1: senza padding verticale l'overflow-x taglia l'ombra (e il bordo
-          inferiore) della pill attiva — su mobile il taglio netto era visibile. */}
-      <nav aria-label="Canali" className="no-scrollbar -mx-1 flex max-w-full gap-1 overflow-x-auto py-1">
+      {/* RIGA KPI (brief §1): sei numeri che dicono lo stato del desk in un
+          colpo — azione dovuta, urgenza (due gradi di SLA), lavoro fatto,
+          quanto ne sta facendo Ambrosio. Contati dal DB (countTickets),
+          ognuno è UN LINK che porta alla vista giusta: un KPI che non si
+          può cliccare è decorazione. Il sesto («risolti oggi») è il solo
+          non-link: non apre una vista, misura la giornata. */}
+      <div aria-label="Stato del desk" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <Link href={qs({ f: "da_rispondere", page: undefined })} className="glass-solid group rounded-2xl px-4 py-3 transition hover:border-brand-300 hover:bg-white/70">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Da rispondere</p>
+          <p className="mt-0.5 text-xl font-bold tabular-nums text-orange-700">{counts.awaitingReply}</p>
+        </Link>
+        <Link href={qs({ f: "aperti", page: undefined })} title="SLA rotto (in ritardo o scaduto)" className="glass-solid group rounded-2xl px-4 py-3 transition hover:border-red-300 hover:bg-white/70">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">In ritardo</p>
+          <p className={`mt-0.5 text-xl font-bold tabular-nums ${counts.slaLate > 0 ? "text-red-700" : "text-slate-900"}`}>{counts.slaLate}</p>
+        </Link>
+        <Link href={qs({ f: "aperti", page: undefined })} title="Clock SLA che scade entro 25 minuti" className="glass-solid group rounded-2xl px-4 py-3 transition hover:border-amber-300 hover:bg-white/70">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Scadenza ≤25′</p>
+          <p className={`mt-0.5 text-xl font-bold tabular-nums ${counts.slaSoon > 0 ? "text-amber-700" : "text-slate-900"}`}>{counts.slaSoon}</p>
+        </Link>
+        <Link href={qs({ f: "miei", page: undefined })} className="glass-solid group rounded-2xl px-4 py-3 transition hover:border-brand-300 hover:bg-white/70">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Presi in carico</p>
+          <p className="mt-0.5 text-xl font-bold tabular-nums text-slate-900">{counts.miei}</p>
+        </Link>
+        <Link
+          href={qs({ f: "aperti", page: undefined })}
+          title="Ticket con Ambrosio attivo (takeover o follow-up) — sotto, quanti hanno l'auto-pilota attivato a mano"
+          className="glass-solid group rounded-2xl px-4 py-3 transition hover:border-violet-300 hover:bg-white/70"
+        >
+          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <Sparkles className="h-3 w-3 text-violet-500" aria-hidden />
+            Ambrosio
+          </p>
+          <p className={`mt-0.5 text-xl font-bold tabular-nums ${counts.ambrosio > 0 ? "text-violet-700" : "text-slate-900"}`}>{counts.ambrosio}</p>
+          <p className={`text-[11px] font-medium ${counts.ambrosioManuale > 0 ? "text-violet-700" : "text-slate-400"}`}>
+            {counts.ambrosioManuale} a mano · {Math.max(0, counts.ambrosio - counts.ambrosioManuale)} SLA
+          </p>
+        </Link>
+        <div className="glass-solid rounded-2xl px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Risolti oggi</p>
+          <p className="mt-0.5 text-xl font-bold tabular-nums text-slate-900">{counts.risoltiOggi}</p>
+        </div>
+      </div>
+
+      {/* TOOLBAR UNICA STICKY: canali + stati + ricerca condividono una riga
+          che resta visibile durante lo scroll della coda (le tab canale e i
+          filtri di triage sono la STESSA decisione «cosa sto guardando» —
+          due livelli separati costringevano a due sguardi). */}
+      <div className="sticky top-2 z-30 space-y-2 rounded-3xl border border-white/60 bg-white/55 p-2 backdrop-blur-xl">
+        <nav aria-label="Canali" className="no-scrollbar -mx-1 flex max-w-full gap-1 overflow-x-auto px-1">
         {channels.map((ch) => {
           const { Icon } = channelMeta(ch.key);
           const active = channel === ch.key;
@@ -211,14 +271,14 @@ export default async function TicketsPage({
             </Link>
           );
         })}
-      </nav>
+        </nav>
 
-      {/* Filtri di triage + ricerca su una riga */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <nav
-          aria-label="Filtri ticket"
-          className="no-scrollbar -mx-1 flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-white/60 bg-white/45 p-1.5 backdrop-blur-xl sm:mx-0"
-        >
+        {/* Filtri di triage + ricerca sulla stessa barra sticky */}
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <nav
+            aria-label="Filtri ticket"
+            className="no-scrollbar -mx-1 flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-white/60 bg-white/45 p-1.5 backdrop-blur-xl sm:mx-0"
+          >
           {FILTERS.map((flt) => (
             <Link
               key={flt.key}
@@ -236,12 +296,46 @@ export default async function TicketsPage({
               )}
             </Link>
           ))}
-        </nav>
+          </nav>
 
-        {/* Ricerca A RICHIESTA: collassata è un bottone — il gesto più
-            frequente è scansionare, la casella vuota era un'inutile promessa
-            permanente (critica: nove controlli prima del primo ticket). */}
-        <TicketSearch q={q} filter={filter} channel={channel} />
+          {/* Ricerca A RICHIESTA: collassata è un bottone — il gesto più
+              frequente è scansionare, la casella vuota era un'inutile promessa
+              permanente (critica: nove controlli prima del primo ticket). */}
+          <TicketSearch q={q} filter={filter} channel={channel} />
+        </div>
+
+        {/* TAG IN USO (migration 046): filtri rapidi sulle
+            categorie applicate ai ticket. Compaiono solo quando
+            almeno un ticket porta un tag — zero tag, zero riga
+            (nessuna promessa vuota). Quello attivo è la pill
+            «rimuovi»: il click toglie il filtro, non lo riapplica. */}
+        {tagCounts.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Tag
+            </span>
+            {tagCounts.map(({ tag: t, n }) => {
+              const active = tag === t;
+              return (
+                <Link
+                  key={t}
+                  href={active ? qs({ tag: undefined, page: undefined }) : qs({ tag: t, page: undefined })}
+                  scroll={false}
+                  aria-current={active ? "page" : undefined}
+                  title={active ? `Rimuovi il filtro tag «${t}»` : `Ticket con tag «${t}»`}
+                  className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
+                    active
+                      ? "bg-brand-600/90 text-white shadow-glass-btn"
+                      : `${TAG_TONE} hover:bg-white`
+                  }`}
+                >
+                  {t}
+                  <span className={`tabular-nums ${active ? "font-bold" : "font-medium text-slate-400"}`}>{n}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Lista di triage a tutta larghezza: scansionare è l'unico compito di questa pagina */}
@@ -249,9 +343,13 @@ export default async function TicketsPage({
         <div className="flex items-baseline justify-between gap-2 px-1">
           {/* Il titolo ripete solo canale (se filtrato): la coda attiva è già
               detta dalla tab filtro — un quarto «aperti/18» era rumore. */}
-          <h2 id="ticket-queue-title" className="text-sm font-bold text-slate-900">
-            Coda
-            {channel !== "all" && <span className="ml-1 font-normal text-slate-500">· {channelMeta(channel).label.toLowerCase()}</span>}
+          <h2 id="ticket-queue-title" className="flex items-center gap-2 text-sm font-bold text-slate-900">
+            <span>
+              Coda
+              {channel !== "all" && <span className="ml-1 font-normal text-slate-500">· {channelMeta(channel).label.toLowerCase()}</span>}
+              {tag && <span className="ml-1 font-normal text-slate-500">· tag «{tag}»</span>}
+            </span>
+            {tickets.length > 0 && <TicketBulkBar canClaim={!!user.operatorId} ids={tickets.map((tk) => tk.id)} onlySelector />}
           </h2>
           <span className="text-xs text-slate-500" title={q ? "Risultati ricerca" : "Più urgenti prima"}>
             {/* Oltre la prima pagina la POSIZIONE sostituisce il totale: senza
@@ -278,144 +376,42 @@ export default async function TicketsPage({
             />
           )}
           {tickets.map((tk, i) => {
-            const sla = slaTier(tk);
-            const open = tk.status !== "closed";
-            const waiting = awaitsReply(tk);
             const bucket = dateBucket(tk.updated_at);
             // L'header appare solo alla PRIMA occorrenza del bucket: l'ordinamento
             // è per urgenza, quindi un ticket di oggi può seguire uno di ieri —
             // ripetere «OGGI» a metà lista sembra un bug, non lo è.
             const showHeader = !q && !tickets.slice(0, i).some((p) => dateBucket(p.updated_at) === bucket);
-            const late = open && (sla.label === "in ritardo" || sla.label === "scaduto");
-            const { Icon: ChannelIcon, label: channelLabel } = channelMeta(tk.channel ?? null);
+            // VARIANTE C (assessment §Revisione post-confronto): il WhatsApp
+            // contestuale entra in inbox come SOLO icona in colonna azioni —
+            // solo quando il lead porta wa_phone, mai una pill in riga stato.
+            const waDigits = tk.wa_phone?.replace(/\D/g, "");
             return (
-              <div key={tk.id}>
-                {showHeader && (
-                  <p className="mb-1 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    {bucket}
-                  </p>
-                )}
-                <div
-                  className={`group/ticket relative block rounded-2xl border transition ${
-                    waiting
-                      ? "glass-solid ticket-waiting hover:border-brand-300 hover:bg-white/70"
-                      : "glass-solid border-white/40 hover:border-slate-300/80 hover:bg-white/60"
-                  }`}
-                >
-                  {/* CARD = div; il LINK è il titolo (gesto primario APRIRE).
-                      Prima la card intera era <Link> e le azioni di triage
-                      stavano DENTRO: interattivi annidati in interattivo
-                      (violazione ARIA, miss-click su touch — verificato in
-                      vivo: il click sul menu ⋯ apriva il ticket). Ora le azioni
-                      vivono nella colonna destra, fuori dal link. */}
-                  <div className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-start gap-x-3 p-3 sm:grid-cols-[56px_minmax(0,1fr)_auto_auto]">
-                    {/* Numero: colonna stabile, scansionabile in verticale */}
-                    <span className="mt-0.5 font-mono text-sm font-semibold tabular-nums text-brand-700">
-                      #{tk.number}
-                    </span>
-
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        {/* Il LINK è il titolo: il gesto primario (APRIRE) è
-                            il titolo stesso, come nelle liste mail — non serve
-                            la card intera cliccabile se ogni card ha azioni
-                            proprie. */}
-                        <Link
-                          href={`/admin/tickets/${tk.id}`}
-                          className="line-clamp-1 text-sm font-semibold text-slate-900 transition hover:text-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
-                        >
-                          «{tk.initial_query || "senza query"}»
-                        </Link>
-                        {/* RIGA DI STATO UNICA: chi l'ha in mano, come sta lo
-                            SLA (solo se dice qualcosa), quanto urga. «Attende
-                            risposta» NON è qui: esiste come bordo arancio della
-                            card e come filtro «Da rispondere» — due posti bastano,
-                            una terza copia era rumore. Prima: 4 pill in angoli
-                            diversi (stato qui, SLA qui, stato+priorità nella
-                            colonna destra) — nessuno con un senso proprio. */}
-                        <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_TONE[tk.status] ?? ""}`}>
-                          {STATUS_LABEL[tk.status] ?? tk.status}
-                        </span>
-                        {open && tk.status !== "on_hold" && sla.label !== "entro SLA" && sla.label !== "palla dal cliente" && (
-                          <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${sla.tone}`}>
-                            {late && <span aria-hidden className="sla-late-dot" />}
-                            {sla.label}
-                          </span>
-                        )}
-                        {tk.priority !== "normale" && (
-                          <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${PRIORITY_TONE[tk.priority] ?? ""}`}>
-                            {PRIORITY_LABEL[tk.priority] ?? tk.priority}
-                          </span>
-                        )}
-                      </div>
-                      {/* Ogni voce è un'unità nowrap: la riga va a capo TRA le
-                          voci, mai dentro («8 / msg»). I separatori «·» sono
-                          stati TOLTI: a capo partivano con il punto orfano
-                          («· 28 set, 05:45» da solo) — il gap larga (10px)
-                          separa le voci senza rompersi al wrap. */}
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-slate-500">
-                        <span className={`inline-flex items-center gap-1 whitespace-nowrap ${tk.channel === "email" ? "font-medium text-brand-700" : ""}`}>
-                          <ChannelIcon className="h-3 w-3" aria-hidden />
-                          {channelLabel}
-                        </span>
-                        {/* Il contatto del richiedente: su email è l'indirizzo
-                            (a colpo d'occhio sai A CHI risponderai), su chat
-                            il nome del lead o il telefono. */}
-                        <span className="inline-flex min-w-0 items-center whitespace-nowrap">
-                          {tk.channel === "email" && tk.contact_email ? (
-                            <span className="truncate font-medium text-slate-600" title={tk.contact_email}>{tk.contact_email}</span>
-                          ) : (
-                            <span>{tk.lead_name ?? tk.lead_phone ?? "Anonimo"}</span>
-                          )}
-                        </span>
-                        {tk.channel === "email" && tk.lead_name && (
-                          <span className="inline-flex items-center whitespace-nowrap">
-                            <span>{tk.lead_name}</span>
-                          </span>
-                        )}
-                        <span className="inline-flex items-center whitespace-nowrap">
-                          <span className="tabular-nums">{tk.message_count} msg</span>
-                        </span>
-                        <span className="inline-flex items-center whitespace-nowrap">
-                          <span>{new Date(tk.updated_at).toLocaleDateString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
-                        </span>
-                        {tk.assigned_name && (
-                          <span className="inline-flex items-center whitespace-nowrap">
-                            <span className="font-medium text-slate-600">{tk.assigned_name}</span>
-                          </span>
-                        )}
-                      </p>
-                      {tk.last_message_body && (
-                        <p className="mt-1 line-clamp-1 text-xs leading-relaxed text-slate-600">
-                          {tk.last_sender === "visitor" ? "Cliente: " : "Team: "}{tk.last_message_body}
-                        </p>
-                      )}
-                      {/* Azioni di triage (mobile): nel corpo, sotto la preview —
-                          su desktop la stessa componente sta nella colonna destra. */}
-                      <div className="mt-2 sm:hidden">
-                        <TicketCardActions
-                          ticketId={tk.id}
-                          open={open}
-                          waitingReply={waiting}
-                          mine={!!user.operatorId && tk.assigned_to === user.operatorId}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Zona azioni (desktop): la colonna destra È delle azioni —
-                        primary visibile + menu ⋯ (Chiudi, Nascondi). FUORI dal
-                        link del titolo: nessun interattivo annidato. */}
-                    <div className="hidden sm:block">
-                      <TicketCardActions
-                        ticketId={tk.id}
-                        open={open}
-                        waitingReply={waiting}
-                        mine={!!user.operatorId && tk.assigned_to === user.operatorId}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <TicketQueueRow
+                key={tk.id}
+                ticket={tk}
+                userOperatorId={user.operatorId ?? null}
+                channel={channelMeta(tk.channel ?? null)}
+                showBucketHeader={showHeader}
+                bucketLabel={bucket}
+                ambrosio={{
+                  takeover: tk.ambrosio_takeover ?? false,
+                  followup: tk.ambrosio_followup ?? false,
+                  manuale: tk.ambrosio_manuale ?? false,
+                  followupDisabled: tk.followup_disabled ?? false,
+                }}
+                crm={
+                  tk.client_id && tk.client_name
+                    ? { clientId: tk.client_id, clientName: tk.client_name }
+                    : null
+                }
+                whatsappLink={
+                  waDigits
+                    ? { href: waTicketHref(waDigits, tk.number), label: `WhatsApp per il ticket #${tk.number}` }
+                    : undefined
+                }
+                whatsappStyle="icon"
+                bulkSelect
+              />
             );
           })}
           {!tickets.length && (
@@ -423,13 +419,28 @@ export default async function TicketsPage({
               <Inbox className="mx-auto h-6 w-6 text-slate-400" aria-hidden />
               <p className="mt-2 text-sm font-semibold text-slate-700">Nessun ticket in questa coda</p>
               <p className="mt-1 text-xs text-slate-500">Prova un altro filtro, un altro canale o rimuovi la ricerca.</p>
-              {(page > 1 || q) && (
-                <GlassLinkButton variant="glass" size="sm" className="mt-3" href={q ? qs({ page: undefined, q: undefined }) : qs({ page: undefined })}>
-                  {q ? "Torna alla coda" : "Torna alla prima pagina"}
-                </GlassLinkButton>
-              )}
+              {/* Via d'uscita SEMPRE visibile (revisione UX §2.8): il vuoto
+                  non è un vicolo cieco — «Vai a Tutti» precompila il gesto
+                  più probabile invece di solo suggerirlo a parole. */}
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                {(filter !== "aperti" || channel !== "all" || tag) && (
+                  <GlassLinkButton variant="primary" size="sm" href={qs({ f: undefined, channel: undefined, tag: undefined, page: undefined })}>
+                    Vai a Tutti
+                  </GlassLinkButton>
+                )}
+                {(page > 1 || q) && (
+                  <GlassLinkButton variant="glass" size="sm" href={q ? qs({ page: undefined, q: undefined }) : qs({ page: undefined })}>
+                    {q ? "Torna alla coda" : "Torna alla prima pagina"}
+                  </GlassLinkButton>
+                )}
+              </div>
             </div>
           )}
+
+          {/* Barra bulk: UNA sola istanza per pagina, dopo la coda (il suo
+              secondo pezzo è il selettore «tutti» nel titolo; il feedback
+              ?bulk= diventa toast dentro la barra). */}
+          {tickets.length > 0 && <TicketBulkBar canClaim={!!user.operatorId} ids={tickets.map((tk) => tk.id)} />}
         </div>
 
         {/* Paginazione: solo quando c'è qualcosa da paginare (una pagina sola

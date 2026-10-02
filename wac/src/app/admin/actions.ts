@@ -15,14 +15,24 @@ import {
   QUICK_REPLIES_MAX,
   SLA_POLICY_KEY,
   LAST_SENDER_SQL,
+  TAG_VOCABULARY_KEY,
   TICKET_PRIORITIES,
   TICKET_STATUSES,
+  TICKET_TAGS_MAX,
+  TICKET_TAG_VOCAB_MAX,
+  canMerge,
   getChatEmojis,
   getQuickReplies,
+  getTicket,
+  getTicketByNumber,
+  getTicketTagVocabulary,
+  nextEscalationLevel,
+  sanitizeTags,
   slaDueFor,
+  bumpContentSettingsVersion,
 } from "@/lib/tickets";
 import { saveAiSettings, saveProviderKey, setPrimaryProvider, clearLegacyKey, saveAiFaq, deleteAiFaq, ambrosioReply, draftFaqAnswer, draftSeoMeta, draftLandingContent, translateFaq, sanitizeFaqTranslations, PROVIDERS, type AiProvider, type FaqTranslations } from "@/lib/ai";
-import { syncClients } from "@/lib/clients";
+import { syncClients, setClientType, rejectClientDitta } from "@/lib/clients";
 import { saveNotionSettings, testNotionConnection } from "@/lib/notion";
 import {
   buildNotionPayload,
@@ -35,12 +45,21 @@ import { listClients } from "@/lib/clients";
 import { unbanIp, shieldViolate } from "@/lib/shield";
 import { limit, clientIp } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
-import { adapterFor } from "@/lib/messaging";
+import { adapterFor, toE164 } from "@/lib/messaging";
+import { sendOutbound } from "@/lib/channel-outbound";
 import { headers } from "next/headers";
 import { HERO_KEY, sanitizeHeroConfig } from "@/lib/hero-shared";
 import { MAINTENANCE_KEY } from "@/lib/maintenance-shared";
+import { PAGE_CACHE_KEY, sanitizePageCacheConfig } from "@/lib/page-cache-shared";
+import { readPageCacheConfig } from "@/lib/page-cache-store";
+import { PERF_TARGET_KEY, sanitizePerfTargetConfig } from "@/lib/perf-target-shared";
+import { readPerfTargetConfig } from "@/lib/perf-target-store";
+import { sanitizeCacheReason, selectedTargets, targetLabels, wantsTarget } from "@/lib/cache-shared";
+import { purgeSiteCache } from "@/lib/cache-purge";
+import { purgeProxyCaches } from "@/proxy";
 import { getGoogleApiKey, saveGoogleToolsConfig, testPageSpeed, saveGscCredentials, removeGscCredentials } from "@/lib/google-tools";
 import { saveDriveCredentials, testDriveConnection } from "@/lib/drive";
+import { saveOneDriveCredentials, testOneDriveConnection } from "@/lib/onedrive";
 import { getGscQueries, getGscPageQueries, getGscPagePosition, getGscPagePositionTrend, testGscConnection, GscError } from "@/lib/gsc";
 import { getSeoConfig, saveSeoConfig, sanitizeSeoConfig, sanitizeSlug, isValidRedirectPath, effectiveLandingSeo, pushContentVersion, pushMetaVersion, recordPageAlert, PAGE_ALERT_THRESHOLDS, diffSeoConfig } from "@/lib/seo";
 import { LANDINGS } from "@/lib/site";
@@ -429,6 +448,175 @@ export async function addTicketNote(formData: FormData) {
   revalidatePath(`/admin/tickets?t=${conversationId}`);
 }
 
+/* ═══ TICKET UPGRADE (migration 046): tag, escalation, merge ═══
+   Le regole (normalizzazione, livelli, guardie) sono PURE in
+   tickets-shared.ts e testate direttamente in
+   tests/ticketing-upgrade.test.mjs: qui solo IO e audit. */
+
+/**
+ * Applica i tag di un ticket (sostituzione completa). La lista
+ * arriva come campi ripetuti «tags» o stringa CSV: la
+ * normalizzazione (kebab-case, dedup, max) è la regola pura
+ * sanitizeTags — la stessa del vocabolario, così un tag
+ * salvato lì combacia SEMPRE con quello applicato qui.
+ * Delete+insert in un'unica CTE: atomica, niente stati
+ * intermedi visibili. L'audit entra nella timeline del
+ * ticket (addAudit) e nel registro (logAudit).
+ */
+export async function setTicketTags(formData: FormData) {
+  const user = await requireAdmin();
+  const conversationId = String(formData.get("conversationId") ?? "");
+  if (!conversationId) return;
+  const raw = formData.getAll("tags").flatMap((v) => String(v).split(/[,\n]+/));
+  const tags = sanitizeTags(raw, TICKET_TAGS_MAX);
+  const pool = db();
+  if (!pool) return;
+  await pool.query(
+    `with del as (
+       delete from ticket_tags where conversation_id = $1
+     )
+     insert into ticket_tags (conversation_id, tag)
+     select $1, unnest($2::text[])`,
+    [conversationId, tags],
+  );
+  await addAudit(
+    pool,
+    user.email,
+    "tag",
+    conversationId,
+    tags.length ? tags.join(", ") : "rimossi",
+  );
+  await logAudit(user.email, "ticket.tag", conversationId, tags.join(", ") || "rimossi");
+  revalidatePath("/admin/tickets");
+  revalidatePath(`/admin/tickets?t=${conversationId}`);
+}
+
+/**
+ * Escalation: sale di UN livello (max 3, regola pura
+ * nextEscalationLevel — al massimo è un no-op silenzioso: il
+ * pulsante scompare dalla UI, la action difende lo stesso).
+ * Timbra escalation_at: il passaggio di livello ha una data,
+ * non solo un numero.
+ */
+export async function escalateTicket(formData: FormData) {
+  const user = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const pool = db();
+  if (!pool) return;
+  const ticket = await getTicket(id);
+  if (!ticket) return;
+  const next = nextEscalationLevel(ticket.escalation_level ?? 0);
+  if (next === null) return; // già al massimo: nessuna scrittura
+  await pool.query(
+    "update conversations set escalation_level = $1, escalation_at = now() where id = $2",
+    [next, id],
+  );
+  await addAudit(pool, user.email, "escalation", id, `Livello ${next}`);
+  await logAudit(user.email, "ticket.escalation", id, `Livello ${next}`);
+  revalidatePath("/admin/tickets");
+  revalidatePath(`/admin/tickets?t=${id}`);
+}
+
+/**
+ * Merge: fonde un duplicato (sorgente, per id) nella
+ * destinazione — per NUMERO (è ciò che l'agente legge in
+ * inbox e condivide a voce) o per id. Guardia canMerge
+ * (regola pura): mai sé-stessi, mai un ticket già fuso come
+ * sorgente, mai uno già fuso come destinazione. Il sorgente
+ * resta nel DB (cronologia chat e note restano leggibili dal
+ * suo dettaglio) ma esce da ogni lista: il dettaglio mostra
+ * il banner «fuso in #N» con il link alla destinazione.
+ */
+export async function mergeTickets(formData: FormData) {
+  const user = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const into = String(formData.get("into") ?? "").trim();
+  if (!id || !into) return;
+  const pool = db();
+  if (!pool) return;
+  const source = await getTicket(id);
+  if (!source) return;
+  // Un UUID non è mai solo cifre: il ramo numerico non può
+  // urtare la ricerca per id (e viceversa un id non parserebbe
+  // come numero, quindi nessun errore di tipo dalla query).
+  const target = /^\d+$/.test(into)
+    ? await getTicketByNumber(Number(into))
+    : await getTicket(into);
+  if (!target) return;
+  if (
+    !canMerge({
+      self: source.id === target.id,
+      alreadyMerged: source.merged_into !== null,
+      destinationMerged: target.merged_into !== null,
+    })
+  )
+    return;
+  await pool.query(
+    "update conversations set merged_into = $1, merged_at = now() where id = $2",
+    [target.id, source.id],
+  );
+  await addAudit(pool, user.email, "merge", source.id, `in #${target.number}`);
+  await logAudit(user.email, "ticket.merge", source.id, `in #${target.number}`);
+  revalidatePath("/admin/tickets");
+  revalidatePath(`/admin/tickets?t=${source.id}`);
+  revalidatePath(`/admin/tickets?t=${target.id}`);
+}
+
+/**
+ * Anteprima della destinazione di un merge (sola lettura):
+ * l'agente vede numero, query e stato del ticket che
+ * assorbirà il duplicato PRIMA di confermare. Restituisce
+ * null se il numero non esiste o è già fuso — una destinazione
+ * fusa non è ammibile (canMerge, regola pura).
+ */
+export async function lookupTicketForMerge(formData: FormData) {
+  await requireAdmin();
+  const into = String(formData.get("into") ?? "").trim();
+  if (!/^\d+$/.test(into)) return null;
+  const t = await getTicketByNumber(Number(into));
+  if (!t) return null;
+  return {
+    number: t.number,
+    id: t.id,
+    query: t.initial_query,
+    status: t.status,
+    priority: t.priority,
+    assigned_name: t.assigned_name ?? null,
+  };
+}
+
+/**
+ * Salva il vocabolario canonico dei tag (una per riga, max 30):
+ * è ciò che la datalist suggerisce nell'editor dei tag.
+ * Stessa disciplina di saveQuickReplies: il JSON su
+ * content_settings viene riscritto solo se diverso, niente
+ * scritture superflue. La normalizzazione è sanitizeTags —
+ * identica a quella dei tag del ticket, così il suggerimento
+ * combacia sempre con ciò che l'agente applica.
+ */
+export async function saveTicketTagVocabulary(formData: FormData) {
+  const user = await requireAdmin();
+  const pool = db();
+  if (!pool) return;
+  const list = sanitizeTags(
+    String(formData.get("tags") ?? "").split("\n"),
+    TICKET_TAG_VOCAB_MAX,
+  );
+  const current = await getTicketTagVocabulary();
+  if (JSON.stringify(list) === JSON.stringify(current)) return;
+  await pool.query(
+    `insert into content_settings (key, value, updated_at) values ($1, $2::jsonb, now())
+     on conflict (key) do update set value = $2::jsonb, updated_at = now()`,
+    [TAG_VOCABULARY_KEY, JSON.stringify(list)],
+  );
+  // Stessa ragione di saveQuickReplies: il render post-revalidate rilegge fresco.
+  bumpContentSettingsVersion();
+  await logAudit(user.email, "ticket.tag-vocabolario", null, `${list.length} tag`);
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/tickets");
+}
+
 /**
  * Salva le risposte rapide del ticketing (una per riga, max 8, max 300
  * caratteri). Il JSON su content_settings viene riscritto solo se il testo
@@ -451,6 +639,10 @@ export async function saveQuickReplies(formData: FormData) {
      on conflict (key) do update set value = $2::jsonb, updated_at = now()`,
     [QUICK_REPLIES_KEY, JSON.stringify(list)],
   );
+  // Il render della STESSA richiesta rilegge fresco (ADR-005: snapshot
+  // content_settings per richiesta, versionato): revalidatePath da solo non
+  // invalida la cache() di React dentro la richiesta in corso.
+  bumpContentSettingsVersion();
   await logAudit(user.email, "ticket.risposte-rapide", null, `${list.length} risposte`);
   revalidatePath("/admin/settings");
   revalidatePath("/admin/tickets");
@@ -478,6 +670,8 @@ export async function saveChatEmojis(formData: FormData) {
      on conflict (key) do update set value = $2::jsonb, updated_at = now()`,
     [CHAT_EMOJIS_KEY, JSON.stringify(list)],
   );
+  // Stessa ragione di saveQuickReplies: il render post-revalidate rilegge fresco.
+  bumpContentSettingsVersion();
   await logAudit(user.email, "chat.emoji", null, `${list.length} emoji`);
   revalidatePath("/admin/settings");
   revalidatePath("/admin/settings/emoji-chat");
@@ -500,6 +694,74 @@ export async function archiveTicket(formData: FormData) {
   await logAudit(user.email, "ticket.archiviato", id);
   revalidatePath("/admin/tickets");
   revalidatePath(`/admin/tickets?t=${id}`);
+}
+
+/**
+ * BULK ACTIONS sulla coda (UI-REVIEW §2.1): archivia, chiudi o prendi in
+ * carico PIÙ ticket in un gesto — a 60+ ticket l'azione uno-a-uno non
+ * regge. UNA action server (non N form): la coda arriva come lista di id
+ * da un solo form nascosto; il loop riusa le stesse regole delle azioni
+ * singole (stessa clausola guardia archive, stessi SLA clock su chiusura,
+ * stesso audit per ticket — la storia di ognuno resta leggibile). Ids non
+ * UUID e valori fuori dominio si scartano in silenzio: il bulk non è un
+ * vettore di injection.
+ */
+export async function bulkTicketsAction(formData: FormData) {
+  const user = await requireAdmin();
+  const op = String(formData.get("op") ?? "");
+  const ids = String(formData.get("ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s))
+    .slice(0, 100); // tetto ragionevole: la coda pagina a 60
+  if (!ids.length) return;
+  // Il CLAIM richiede un operatore collegato (come l'azione singola);
+  // archivia/chiudi no — un super admin senza operatore può comunque
+  // ripulire la coda (beccato in E2E: return silenzioso = redirect perso).
+  if (op === "claim" && !user.operatorId) return;
+  if (!"archive|close|claim".split("|").includes(op)) return;
+  const pool = db();
+  if (!pool) return;
+
+  let done = 0;
+  for (const id of ids) {
+    if (op === "archive") {
+      const { rowCount } = await pool.query(
+        "update conversations set archived_at = now(), archived_by = $2 where id = $1 and archived_at is null",
+        [id, user.email],
+      );
+      if (rowCount) {
+        await logAudit(user.email, "ticket.archiviato", id);
+        await addAudit(pool, user.email, "archiviazione multipla", id, null);
+        done += 1;
+      }
+    } else if (op === "close") {
+      // Stessa regola delle azioni singole: i clock SLA si FERMANO sulla chiusura.
+      const { rowCount } = await pool.query(
+        `update conversations set status = 'closed', closed_at = coalesce(closed_at, now()),
+           sla_next_reply_due = null, sla_warned_at = null, sla_breached_at = null
+         where id = $1 and status not in ('closed')`,
+        [id],
+      );
+      if (rowCount) {
+        await logAudit(user.email, "ticket.stato", id, "closed");
+        await addAudit(pool, user.email, "chiusura multipla", id, null);
+        done += 1;
+      }
+    } else if (op === "claim") {
+      const { rowCount } = await pool.query(
+        "update conversations set assigned_to = $2 where id = $1 and (assigned_to is null or assigned_to = $2)",
+        [id, user.operatorId],
+      );
+      if (rowCount) {
+        await addAudit(pool, user.email, "ha preso in carico il ticket (multiplo)", id, null);
+        done += 1;
+      }
+    }
+  }
+  revalidatePath("/admin/tickets");
+  // Il toast dice COSA è successo e QUANTO: «bulk:done» porta il conteggio.
+  redirect(`/admin/tickets?bulk=${op}:${done}`);
 }
 
 /** Ripristina un ticket archiviato: torna in inbox nel suo filtro. */
@@ -1019,6 +1281,55 @@ export async function saveClientNotesAction(formData: FormData) {
   revalidatePath("/admin/clients");
 }
 
+/**
+ * Tipo cliente (038): la classificazione è un gesto umano in scheda —
+ * la sync di Ambrosio non congettura. Il valore arriva già filtrato dal
+ * contratto condiviso (setClientType rifiuta ciò che non è nel dominio);
+ * il form offre anche «Da classificare» (= NULL, si riparte).
+ */
+export async function setClientTypeAction(formData: FormData) {
+  const user = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const tipo = String(formData.get("client_type") ?? "").trim();
+  if (!id) return;
+  await setClientType(id, tipo || null, user.email);
+  revalidatePath(`/admin/clients/${id}`);
+  revalidatePath("/admin/clients");
+}
+
+/**
+ * Salva la ditta proposta dal suggerimento (038/039): la scrittura esiste
+ * SOLO come gesto esplicito — il banner propone, l'umano decide. La ditta
+ * arriva già ripulita dal layer puro; qui solo guardie standard. Serve sia
+ * alla scheda che al punto d'azione rapido della lista (origine per la
+ * revalidate mirata).
+ */
+export async function salvaDittaAction(formData: FormData) {
+  const user = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const ditta = String(formData.get("ditta") ?? "").trim().slice(0, 120);
+  if (!id || !ditta) return;
+  const pool = db();
+  if (!pool) return;
+  await pool.query("update clients set company_name = $2, updated_at = now() where id = $1", [id, ditta]);
+  await logAudit(user.email, "client.ditta", id, ditta);
+  revalidatePath(`/admin/clients/${id}`);
+  revalidatePath("/admin/clients");
+}
+
+/**
+ * Rigetta la ditta proposta: il «no» resta in client_meta (039) e il
+ * suggerimento non riparte per quella ditta — diverso dal chiudere gli occhi.
+ */
+export async function rigettaDittaAction(formData: FormData) {
+  const user = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const ditta = String(formData.get("ditta") ?? "").trim();
+  if (!id || !ditta) return;
+  await rejectClientDitta(id, ditta, user.email);
+  revalidatePath(`/admin/clients/${id}`);
+}
+
 /* ── PACCHETTI (proposti da Ambrosio) ───────────────────────────── */
 
 function pkgStr(fd: FormData, key: string, max = 200): string {
@@ -1146,6 +1457,40 @@ export async function testDriveAction() {
   await logAudit(user.email, "drive.test", null, result.ok ? `OK — ${result.message}` : `ERRORE — ${result.message}`);
   const msg = result.ok ? `OK — ${result.message}` : `ERRORE — ${result.message}`;
   redirect(`/admin/settings/drive?test=${encodeURIComponent(msg)}`);
+}
+
+/* ── Microsoft OneDrive (Microsoft Graph) ─────────────── */
+
+export async function saveOneDriveAction(formData: FormData) {
+  const user = await requireAdmin();
+  const tenantId = String(formData.get("tenantId") ?? "").trim();
+  const clientId = String(formData.get("clientId") ?? "").trim();
+  const clientSecret = String(formData.get("clientSecret") ?? "").trim();
+  const remove = String(formData.get("remove") ?? "") === "1";
+  if (remove) {
+    await saveOneDriveCredentials({ tenantId: "", clientId: "", clientSecret: "" }, { removeCreds: true });
+    await logAudit(user.email, "onedrive.impostazioni", null, "credenziali rimosse");
+    redirect("/admin/settings/onedrive?test=" + encodeURIComponent("Credenziali OneDrive rimosse."));
+  }
+  if (!tenantId || !clientId || !clientSecret) {
+    redirect("/admin/settings/onedrive?test=" + encodeURIComponent("ERRORE — servono ID tenant, ID applicazione e segreto client (o chiedi la rimozione)."));
+  }
+  const result = await saveOneDriveCredentials({ tenantId, clientId, clientSecret });
+  if (!result.ok) {
+    redirect("/admin/settings/onedrive?test=" + encodeURIComponent(`ERRORE — ${result.error ?? "credenziali non valide"}`));
+  }
+  await logAudit(user.email, "onedrive.impostazioni");
+  revalidatePath("/admin/settings/onedrive");
+  redirect("/admin/settings/onedrive?test=" + encodeURIComponent("Credenziali salvate: ora usa «Prova connessione» per verificare Microsoft Graph."));
+}
+
+/** Test di connessione REALE: client-credentials → token → /sites/root/drive su Graph. */
+export async function testOneDriveAction() {
+  const user = await requireAdmin();
+  const result = await testOneDriveConnection();
+  await logAudit(user.email, "onedrive.test", null, result.ok ? `OK — ${result.message}` : `ERRORE — ${result.message}`);
+  const msg = result.ok ? `OK — ${result.message}` : `ERRORE — ${result.message}`;
+  redirect(`/admin/settings/onedrive?test=${encodeURIComponent(msg)}`);
 }
 
 /* ── GOOGLE CALENDAR: salvataggio, test, backfill ─────────────────── */
@@ -1290,7 +1635,7 @@ export async function saveGoogleToolsAction(formData: FormData) {
     removeApiKey,
   });
   await logAudit(user.email, "google-tools.impostazioni");
-  revalidatePath("/admin/tools/google");
+  revalidatePath("/admin/settings/google");
 }
 
 export async function testGooglePageSpeedAction() {
@@ -1298,7 +1643,7 @@ export async function testGooglePageSpeedAction() {
   const key = await getGoogleApiKey();
   const result = await testPageSpeed(key ?? undefined);
   await logAudit(user.email, "google-tools.pagespeed-test", null, result.message);
-  redirect(`/admin/tools/google?google_test=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/settings/google?google_test=${encodeURIComponent(result.message)}`);
 }
 
 /* ── SEARCH CONSOLE API (query reali in /admin/seo) ──────────── */
@@ -1315,9 +1660,9 @@ export async function saveGscCredentialsAction(formData: FormData) {
   const result = await saveGscCredentials(rawJson, siteUrl);
   if (result.ok) {
     await logAudit(user.email, "google-tools.gsc-creds", null, `proprietà ${siteUrl.trim() || "(vuota)"}`);
-    redirect("/admin/tools/google?gsc_test=Credenziali%20salvate%3A%20usa%20%C2%ABTesta%20collegamento%C2%BB%20per%20verificarle.");
+    redirect("/admin/settings/google?gsc_test=Credenziali%20salvate%3A%20usa%20%C2%ABTesta%20collegamento%C2%BB%20per%20verificarle.");
   }
-  redirect(`/admin/tools/google?gsc_test=${encodeURIComponent(result.error ?? "Errore salvataggio")}`);
+  redirect(`/admin/settings/google?gsc_test=${encodeURIComponent(result.error ?? "Errore salvataggio")}`);
 }
 
 /** Test di connessione a Search Console (permessi sulla proprietà). */
@@ -1325,7 +1670,7 @@ export async function testGscConnectionAction() {
   const user = await requireAdmin();
   const result = await testGscConnection();
   await logAudit(user.email, "google-tools.gsc-test", null, result.message);
-  redirect(`/admin/tools/google?gsc_test=${encodeURIComponent(result.message)}`);
+  redirect(`/admin/settings/google?gsc_test=${encodeURIComponent(result.message)}`);
 }
 
 /** Rimuove le credenziali Search Console salvate. */
@@ -1333,7 +1678,7 @@ export async function removeGscCredentialsAction() {
   const user = await requireAdmin();
   await removeGscCredentials();
   await logAudit(user.email, "google-tools.gsc-creds-rimosse");
-  redirect("/admin/tools/google?gsc_test=Credenziali%20Search%20Console%20rimosse.");
+  redirect("/admin/settings/google?gsc_test=Credenziali%20Search%20Console%20rimosse.");
 }
 
 /* ── STRUMENTO EMAIL (SMTP + IMAP) ───────────────────────────── */
@@ -1393,68 +1738,131 @@ export async function syncEmailIngestAction() {
       : `/admin/tickets?f=tutti&sync=${encodeURIComponent(summary)}`,
   );
 }
+/** Canali selezionabili nel form «Nuovo ticket»: email (SMTP) + i due canali con outbound già pronti. Meta e LinkedIn stanno nel selettore ma disabilitati («in arrivo», Fase 5). */
+const CREATE_TICKET_CHANNELS = ["email", "whatsapp", "telegram"] as const;
 
 /**
  * Nuovo ticket manuale creato dall'agente (come in qualsiasi CRM):
- * via email l'agente apre il caso e la prima risposta parte via SMTP
- * con oggetto «[#N] …». Canale 'email' perché il cliente risponde
- * nella sua casella, non nella web chat.
+ * l'agente apre il caso e la prima risposta parte dal canale scelto
+ * — email via SMTP (oggetto «[#N] …»), WhatsApp via Graph API,
+ * Telegram via Bot API. Il cliente risponde nel suo canale: la
+ * risposta torna nel ticket (polling IMAP / webhook social).
  */
 export async function createTicketAction(formData: FormData) {
   const user = await requireAdmin();
-  const contactEmail = String(formData.get("contactEmail") ?? "").trim().slice(0, 200);
+  const channel = String(formData.get("channel") ?? "email");
+  if (!(CREATE_TICKET_CHANNELS as readonly string[]).includes(channel)) {
+    redirect(`/admin/tickets/new?error=${encodeURIComponent("Canale non valido.")}`);
+  }
+  const contact = String(formData.get("contact") ?? "").trim().slice(0, 200);
   const subject = String(formData.get("subject") ?? "").trim().slice(0, 200);
-  const body = String(formData.get("body") ?? "").trim().slice(0, 4000);
-  // Email formattata (WpEditor): l'HTML arriva dall'editor e viene
-  // SANITIZZATO lato server — il client non è mai fidato.
+  // Messaggio: il WpEditor produce HTML (bodyHtml). Il campo body
+  // è il fallback di compatibilità — dal commit eab3699 il form
+  // invia SOLO bodyHtml, quindi senza questa derivazione il body
+  // arriva sempre vuoto e il ticket non si crea mai (bug fix).
   const bodyHtmlRaw = String(formData.get("bodyHtml") ?? "");
+  const bodyFromForm = String(formData.get("body") ?? "").trim();
+  const body = (bodyFromForm || htmlToEmailText(bodyHtmlRaw).trim()).slice(0, 4000);
   const priority = String(formData.get("priority") ?? "normale");
+  // Contatto validato PER CANALE: indirizzo email, numero E.164
+  // (WhatsApp) o chat id/@username (Telegram).
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-  if (!EMAIL_RE.test(contactEmail) || !subject || !body) {
-    redirect(`/admin/tickets/new?error=${encodeURIComponent("Email, oggetto e messaggio sono obbligatori (email deve essere valida).")}`);
+  let contactEmail: string | null = null;
+  let contactHandle: string | null = null;
+  if (channel === "email") {
+    if (EMAIL_RE.test(contact)) contactEmail = contact;
+  } else if (channel === "whatsapp") {
+    contactHandle = toE164(contact); // +39…, null se non normalizzabile
+  } else if (channel === "telegram") {
+    if (/^-?\d+$|^@?[A-Za-z0-9_]{5,32}$/.test(contact)) contactHandle = contact.replace(/^@/, "");
+  }
+  const CONTACT_ERROR = "Contatto, oggetto e messaggio sono obbligatori (il contatto deve essere valido per il canale scelto: email, numero WhatsApp o chat id/@username Telegram).";
+  if ((!contactEmail && !contactHandle) || !subject || !body) {
+    redirect(`/admin/tickets/new?error=${encodeURIComponent(CONTACT_ERROR)}`);
   }
   const pool = db();
   if (!pool) return;
   const { rows } = await pool.query<{ id: string; number: number }>(
-    `insert into conversations (channel, status, initial_query, contact_email, priority, assigned_to)
-     values ('email', 'open', $1, $2, $3, $4) returning id, number`,
+    `insert into conversations (channel, status, initial_query, contact_email, contact_handle, priority, assigned_to)
+     values ($1, 'open', $2, $3, $4, $5, $6) returning id, number`,
     [
+      channel,
       subject,
       contactEmail,
+      contactHandle,
       TICKET_PRIORITIES.includes(priority as (typeof TICKET_PRIORITIES)[number]) ? priority : "normale",
       user.operatorId,
     ],
   );
   const ticket = rows[0];
   await pool.query(
-    "insert into messages (conversation_id, sender, body, author) values ($1, 'operator', $2, $3)",
-    [ticket.id, body, user.displayName],
-  );
-  await pool.query(
     "update conversations set first_response_at = now(), sla_next_reply_due = null where id = $1",
     [ticket.id],
   );
-  // La prima risposta parte davvero via SMTP: il cliente trova l'email
-  // con oggetto [#N] e risponde nel filo → il ticket si alimenta da sé.
-  // Con il WpEditor l'email è multipart: testo piano + HTML formattato
-  // (stesso contenuto, whitelisted) — i client mostrano l'HTML.
-  const hasHtml = bodyHtmlRaw.includes("<");
-  const bodyHtml = hasHtml ? sanitizeEmailHtml(bodyHtmlRaw) : "";
-  const textBody = hasHtml
-    ? htmlToEmailText(bodyHtml)
-    : `${body}\n\n— ${user.displayName}, Web Agency Crema\nRispondi a questa email: finirà nel ticket #${ticket.number}.`;
-  const signatureHtml = `<p style="color:#64748b;font-size:13px;margin:16px 0 0;">— ${user.displayName}, Web Agency Crema<br>Rispondi a questa email: finirà nel ticket #${ticket.number}.</p>`;
-  const sent = await sendEmailViaTools({
-    to: contactEmail,
-    subject: `[#${ticket.number}] ${subject}`,
-    text: textBody,
-    ...(hasHtml ? { html: buildEmailHtml(`${bodyHtml}${signatureHtml}`) } : {}),
+
+  // ── Email: la prima risposta parte via SMTP (flusso storico, invariato) ──
+  if (channel === "email") {
+    await pool.query(
+      "insert into messages (conversation_id, sender, body, author) values ($1, 'operator', $2, $3)",
+      [ticket.id, body, user.displayName],
+    );
+    // Il cliente trova l'email con oggetto [#N] e risponde nel filo
+    // → il ticket si alimenta da sé. Con il WpEditor l'email è
+    // multipart: testo piano + HTML formattato (whitelisted).
+    const hasHtml = bodyHtmlRaw.includes("<");
+    const bodyHtml = hasHtml ? sanitizeEmailHtml(bodyHtmlRaw) : "";
+    const textBody = hasHtml
+      ? htmlToEmailText(bodyHtml)
+      : `${body}\n\n— ${user.displayName}, Web Agency Crema\nRispondi a questa email: finirà nel ticket #${ticket.number}.`;
+    const signatureHtml = `<p style="color:#64748b;font-size:13px;margin:16px 0 0;">— ${user.displayName}, Web Agency Crema<br>Rispondi a questa email: finirà nel ticket #${ticket.number}.</p>`;
+    const sent = await sendEmailViaTools({
+      to: contactEmail as string,
+      subject: `[#${ticket.number}] ${subject}`,
+      text: textBody,
+      ...(hasHtml ? { html: buildEmailHtml(`${bodyHtml}${signatureHtml}`) } : {}),
+    });
+    await logAudit(
+      user.email,
+      "ticket.creato",
+      ticket.id,
+      sent.ok ? `#${ticket.number} via email a ${contactEmail}` : `#${ticket.number} — invio fallito: ${sent.error ?? "?"}`,
+    );
+    revalidatePath("/admin/tickets");
+    redirect(`/admin/tickets/${ticket.id}`);
+  }
+
+  // ── WhatsApp / Telegram: il primo messaggio parte dal canale social ──
+  // Testo in chiaro: l'HTML dell'editor diventa piano (la firma
+  // email non ha senso qui — il cliente risponde nel canale).
+  const plainText =
+    htmlToEmailText(bodyHtmlRaw.includes("<") ? sanitizeEmailHtml(bodyHtmlRaw) : bodyHtmlRaw).trim() || body;
+  const out = await sendOutbound(channel, contactHandle as string, plainText, {
+    conversationId: ticket.id,
+    author: user.displayName,
   });
+  if (!out.ok) {
+    // Il caso resta aperto con la bozza nel thread: l'errore
+    // dell'API (es. Meta rifiuta il business-initiated senza
+    // template approvato) torna all'operatore, che riprova
+    // dal composer del ticket.
+    await pool.query(
+      "insert into messages (conversation_id, sender, body, author) values ($1, 'operator', $2, $3)",
+      [ticket.id, plainText, user.displayName],
+    );
+    await logAudit(
+      user.email,
+      "ticket.creato",
+      ticket.id,
+      `#${ticket.number} — invio ${channel} fallito: ${out.error ?? "?"}`,
+    );
+    revalidatePath("/admin/tickets");
+    redirect(`/admin/tickets/${ticket.id}?error=${encodeURIComponent(out.error ?? "invio fallito")}`);
+  }
   await logAudit(
     user.email,
     "ticket.creato",
     ticket.id,
-    sent.ok ? `#${ticket.number} via email a ${contactEmail}` : `#${ticket.number} — invio fallito: ${sent.error ?? "?"}`,
+    `#${ticket.number} via ${channel} a ${contactHandle}`,
   );
   revalidatePath("/admin/tickets");
   redirect(`/admin/tickets/${ticket.id}`);
@@ -1898,6 +2306,8 @@ export async function saveSlaPolicy(formData: FormData) {
      on conflict (key) do update set value = $2::jsonb, updated_at = now()`,
     [SLA_POLICY_KEY, JSON.stringify(policy)],
   );
+  // Stessa ragione di saveQuickReplies: il render post-revalidate rilegge fresco.
+  bumpContentSettingsVersion();
   await logAudit(user.email, "ticket.sla-policy", null, JSON.stringify(policy));
   revalidatePath("/admin/settings");
   revalidatePath("/admin/tickets");
@@ -2547,5 +2957,106 @@ export async function saveMaintenanceSettings(formData: FormData) {
     active ? "attivata" : "spenta",
   );
   revalidatePath("/admin/tools/manutenzione");
+}
+
+/* ── TTL CACHE PAGINE PUBBLICHE (Tools → Prestazioni) ────── */
+
+/**
+ * Salva il TTL della cache CDN delle pagine pubbliche
+ * (content_settings, chiave dedicata: zero migration).
+ * Il cambio finisce in audit con vecchio→nuovo: la
+ * freschezza del sito pubblico è una leva misurabile.
+ * Il proxy lo applica entro ~30s (cache in-process) e
+ * la rotta /api/page-cache/config ha CDN a 60s.
+ */
+export async function savePageCacheTtl(formData: FormData) {
+  const user = await requireAdmin();
+  const pool = db();
+  if (!pool) return;
+
+  const raw = Number(String(formData.get("ttlSeconds") ?? "").trim());
+  const next = sanitizePageCacheConfig({ ttlSeconds: raw });
+  const prev = await readPageCacheConfig();
+
+  await pool.query(
+    `insert into content_settings (key, value) values ($1, $2::jsonb)
+     on conflict (key) do update set value = $2::jsonb, updated_at = now()`,
+    [PAGE_CACHE_KEY, JSON.stringify(next)],
+  );
+  await logAudit(
+    user.email,
+    "cache.ttl",
+    PAGE_CACHE_KEY,
+    `${prev.ttlSeconds}→${next.ttlSeconds}s`,
+  );
+  revalidatePath("/admin/tools/perf");
+}
+
+/* ── TARGET DI RISPOSTA ADMIN (Tools → Prestazioni) ──────── */
+
+/**
+ * Salva il target di risposta della scheda Velocità
+ * (content_settings, chiave dedicata: zero migration).
+ * Il cursore colora le barre della scheda al momento;
+ * il salvato è la soglia verde che il piano si dà.
+ * Il cambio finisce in audit con vecchio→nuovo.
+ */
+export async function savePerfTarget(formData: FormData) {
+  const user = await requireAdmin();
+  const pool = db();
+  if (!pool) return;
+
+  const raw = Number(String(formData.get("targetMs") ?? "").trim());
+  const next = sanitizePerfTargetConfig({ targetMs: raw });
+  const prev = await readPerfTargetConfig();
+
+  await pool.query(
+    `insert into content_settings (key, value) values ($1, $2::jsonb)
+     on conflict (key) do update set value = $2::jsonb, updated_at = now()`,
+    [PERF_TARGET_KEY, JSON.stringify(next)],
+  );
+  await logAudit(
+    user.email,
+    "perf.target",
+    PERF_TARGET_KEY,
+    `${prev.targetMs}→${next.targetMs}ms`,
+  );
+  revalidatePath("/admin/tools/perf");
+}
+
+/* ── FREE CACHE (Tools → Free cache) ─────────────────────── */
+
+/**
+ * Svuota la Data Cache di Next sui target scelti (revalidatePath solo in
+ * cache-purge.ts, unico punto del repo). Serve dopo modifiche che non
+ * passano dalle action con revalidate integrata: import manuale, restore,
+ * edit diretto sul DB. Ordine fisso: requireAdmin → selezione tipo-sicura →
+ * conferma esplicita → purga → audit → redirect con esito. Il motivo libero
+ * (sanificato da cache-shared) e i target scelti finiscono nel registro
+ * append-only.
+ */
+export async function purgeCacheAction(formData: FormData) {
+  const user = await requireAdmin();
+  const targets = selectedTargets(formData);
+  // Gate doppio: serve almeno un target del catalogo E il flag di conferma
+  // della fase due. Un form senza conferma non fa nulla.
+  if (targets.length === 0 || !wantsTarget(formData, targets)) return;
+
+  const reason = sanitizeCacheReason(formData.get("reason"));
+  const ok = await purgeSiteCache(targets);
+  // Il proxy (manutenzione, redirect SEO, TTL pagine) tiene cache
+  // in-process che le revalidate di Next non invalidano.
+  if (ok) purgeProxyCaches();
+  await logAudit(
+    user.email,
+    "cache.purga",
+    targetLabels(targets),
+    ok ? reason || null : `errore: ${reason || "senza motivo"}`,
+  );
+  const qs = new URLSearchParams();
+  qs.set("purged", ok ? "1" : "0");
+  qs.set("targets", targets.join(","));
+  if (reason) qs.set("reason", reason);
+  redirect(`/admin/tools/cache?${qs.toString()}`);
 }
 

@@ -1,4 +1,12 @@
+import { cache } from "react";
 import { db } from "./db";
+import { TAKEOVER_MANUALE_SQL } from "./takeover-shared";
+import {
+  likeContains,
+  mergeChannelCounts,
+  sanitizeTags,
+  TICKET_TAG_VOCAB_MAX,
+} from "./tickets-shared";
 
 /**
  * Ticketing: le conversazioni qualificate diventano ticket con numero,
@@ -27,6 +35,11 @@ export const CHANNEL_LABEL_IT: Record<string, string> = {
   web: "Chat web",
   email: "Email",
   whatsapp: "WhatsApp",
+  telegram: "Telegram",
+  instagram: "Instagram",
+  messenger: "Messenger",
+  facebook: "Facebook",
+  linkedin: "LinkedIn",
 };
 
 export const TICKET_STATUSES: TicketStatus[] = [
@@ -75,6 +88,15 @@ export const PRIORITY_TONE: Record<string, string> = {
   alta: "bg-amber-50/90 text-amber-700 ring-1 ring-amber-200/70",
   urgente: "bg-red-50/90 text-red-700 ring-1 ring-red-200/70",
 };
+
+/**
+ * Tonalità di escalation e chip dei tag (migration 046):
+ * definite in tickets-shared.ts perché consumate da componenti
+ * CLIENT (pannello escalation, tag editor) — tickets.ts importa
+ * il DB e non può entrare nel bundle browser. Re-esportate qui
+ * per i consumatori server, come il resto delle regole pure.
+ */
+export { ESCALATION_TONE, TAG_TONE } from "./tickets-shared";
 
 export const FILTERS = [
   { key: "aperti", label: "Aperti" },
@@ -181,13 +203,7 @@ export const SLA_POLICY_KEY = "ticket_sla_policy";
 
 /** Policy corrente dal DB (content_settings), con fallback ai default. */
 export async function getSlaPolicy(): Promise<Record<TicketPriority, { nextReplyH: number; resolveH: number }>> {
-  const pool = db();
-  if (!pool) return SLA_POLICY_DEFAULT;
-  const { rows } = await pool.query<{ value: unknown }>(
-    "select value from content_settings where key = $1",
-    [SLA_POLICY_KEY],
-  );
-  const raw = rows[0]?.value;
+  const raw = (await snapshotPerRichiesta())[SLA_POLICY_KEY];
   if (!raw || typeof raw !== "object") return SLA_POLICY_DEFAULT;
   const merged = { ...SLA_POLICY_DEFAULT } as Record<TicketPriority, { nextReplyH: number; resolveH: number }>;
   for (const p of TICKET_PRIORITIES) {
@@ -294,6 +310,18 @@ export interface TicketRow {
   lead_phone: string | null;
   lead_source: string | null;
   message_count: string;
+  /** Chiusura effettiva (KPI «risolti oggi», cron auto-close). */
+  closed_at?: string | null;
+  /** Impronte Ambrosio sulla conversazione (chip nella card inbox). */
+  ambrosio_takeover?: boolean;
+  ambrosio_followup?: boolean;
+  /** L'ultimo evento audit autopilota_* è un ON manuale (chip «a mano»). */
+  ambrosio_manuale?: boolean;
+  /** Follow-up automatico escluso su questo ticket (badge in inbox). */
+  followup_disabled?: boolean;
+  /** Identità CRM dalla rete del sync portafoglio (link contestuale). */
+  client_id?: string | null;
+  client_name?: string | null;
   /** Mittente dell'ultimo messaggio: per il badge «attende risposta». */
   last_sender: string | null;
   /** Anteprima dell'ultimo messaggio, utile per riconoscere il ticket a colpo d'occhio. */
@@ -308,6 +336,23 @@ export interface TicketRow {
   channel?: string | null;
   /** Email del richiedente: il canale email la usa per inviare le risposte. */
   contact_email?: string | null;
+  /** WhatsApp normalizzato DEL lead (021): la fonte del bottone contestuale
+   *  per ticket (pill nella scheda cliente, icona nella inbox — variante C). */
+  wa_phone?: string | null;
+  /** Tag applicati (migration 046): categorizzazione libera con
+   *  vocabolario suggerito in impostazioni. Ordine alfabetico (array_agg). */
+  tags?: string[] | null;
+  /** Livello di escalation: 0 = base («Livello 1»), 1..3 = salito. */
+  escalation_level?: number;
+  /** Quando è salita l'ultima escalation. */
+  escalation_at?: string | null;
+  /** Ticket che ha assorbito questo (merge duplicati): il fuso resta
+   *  leggibile per sempre, ma esce da ogni lista (merged_into is null). */
+  merged_into?: string | null;
+  merged_at?: string | null;
+  /** Numero del ticket che ha assorbito questo: il banner «fuso»
+   *  linka alla destinazione senza una seconda query. */
+  merged_into_number?: number | null;
 }
 
 /**
@@ -333,6 +378,16 @@ export interface TicketCounts {
   archived: number;
   /** Ticket aperti con l'ultimo messaggio del visitatore: «da rispondere». */
   awaitingReply: number;
+  /** Aperti con clock SLA che scade entro 25 minuti (cron li avverte). */
+  slaSoon: number;
+  /** Aperti con SLA già rotto (in ritardo o scaduto). */
+  slaLate: number;
+  /** Chiusi dal mezzanotte (KPI «risolti oggi»). */
+  risoltiOggi: number;
+  /** Aperti con impronta Ambrosio (takeover o followup attivo). */
+  ambrosio: number;
+  /** Aperti con take-over attivato A MANO (ultimo audit = autopilota_on). */
+  ambrosioManuale: number;
 }
 
 /**
@@ -342,10 +397,12 @@ export interface TicketCounts {
 export async function countTickets(operatorId: string | null): Promise<TicketCounts> {
   const pool = db();
   if (!pool)
-    return { aperti: 0, da_rispondere: 0, miei: 0, collega: 0, tutti: 0, archived: 0, awaitingReply: 0 };
-  const base = "select count(*)::int as n from conversations c where ";
+    return { aperti: 0, da_rispondere: 0, miei: 0, collega: 0, tutti: 0, archived: 0, awaitingReply: 0, slaSoon: 0, slaLate: 0, risoltiOggi: 0, ambrosio: 0, ambrosioManuale: 0 };
+  // I ticket FUSI (merge duplicati) non esistono più per il desk: ogni
+  // conteggio li esclude (restano leggibili nel loro permalink).
+  const base = "select count(*)::int as n from conversations c where c.merged_into is null and ";
   const keys = ["aperti", "da_rispondere", "miei", "collega", "tutti"] as const;
-  const [a, dr, m, c, t, arch] = await Promise.all([
+  const [a, dr, m, c, t, arch, soon, late, risolti, amb, ambMan] = await Promise.all([
     // I filtri «miei» e «collega» con operatore identificato aggiungono $1:
     // params va preso da ticketFilterSql (prima era sempre [] e la pagina
     // moriva con «there is no parameter $1» per qualunque utente con
@@ -354,7 +411,48 @@ export async function countTickets(operatorId: string | null): Promise<TicketCou
       const { sql, params } = ticketFilterSql(k, operatorId);
       return pool.query<{ n: number }>(base + sql, params);
     }),
-    pool.query<{ n: number }>("select count(*)::int as n from conversations c where c.archived_at is not null", []),
+    pool.query<{ n: number }>("select count(*)::int as n from conversations c where c.archived_at is not null and c.merged_into is null", []),
+    // KPI della inbox (brief §1): scadenza SLA vicina (≤25 min, la stessa
+    // finestra che il cron avverte), SLA rotto, risolti da mezzanotte,
+    // impronta Ambrosio (takeover o followup attivo su ticket APERTO).
+    pool.query<{ n: number }>(
+      `select count(*)::int as n from conversations c
+       where c.archived_at is null and c.status not in ('closed','bot')
+         and c.merged_into is null
+         and c.sla_next_reply_due is not null
+         and c.sla_next_reply_due > now()
+         and c.sla_next_reply_due - now() < interval '25 minutes'`,
+      [],
+    ),
+    pool.query<{ n: number }>(
+      `select count(*)::int as n from conversations c
+       where c.archived_at is null and c.status not in ('closed','bot')
+         and c.merged_into is null
+         and (
+           (c.sla_next_reply_due is not null and c.sla_next_reply_due <= now())
+           or (c.sla_next_reply_due is null and c.first_response_at is null and c.created_at < now() - interval '4 hours')
+         )`,
+      [],
+    ),
+    pool.query<{ n: number }>("select count(*)::int as n from conversations c where c.status = 'closed' and c.merged_into is null and c.closed_at >= date_trunc('day', now())", []),
+    pool.query<{ n: number }>(
+      `select count(*)::int as n from conversations c
+       where c.archived_at is null and c.status <> 'closed'
+         and c.merged_into is null
+         and (c.ai_takeover_at is not null or c.followup_sent_at is not null)`,
+      [],
+    ),
+    // Take-over attivato A MANO: aperti con takeover attivo E l'ultimo
+    // evento audit autopilota_* = ON (la regola di takeover-shared; serve
+    // l'indice (target, action, created_at desc) della migration 041).
+    pool.query<{ n: number }>(
+      `select count(*)::int as n from conversations c
+       where c.archived_at is null and c.status <> 'closed'
+         and c.merged_into is null
+         and c.ai_takeover_at is not null
+         and ${TAKEOVER_MANUALE_SQL}`,
+      [],
+    ),
   ]);
   const [aperti, daRisp, miei, collega, tutti] = [a, dr, m, c, t].map((r) => r.rows[0].n);
   return {
@@ -365,33 +463,111 @@ export async function countTickets(operatorId: string | null): Promise<TicketCou
     tutti,
     archived: arch.rows[0].n,
     awaitingReply: daRisp,
+    slaSoon: soon.rows[0].n,
+    slaLate: late.rows[0].n,
+    risoltiOggi: risolti.rows[0].n,
+    ambrosio: amb.rows[0].n,
+    ambrosioManuale: ambMan.rows[0].n,
   };
 }
 
 /**
+ * Età relativa compatta della riga («2h», «3gg», «2sett»): regola pura in
+ * tickets-shared.ts (zero import, testabile direttamente) re-esportata qui —
+ * la vista la consuma dal dominio, come slaTier e awaitsReply.
+ */
+export { relativeAge, waTicketHref, likeContains } from "./tickets-shared";
+
+/**
+ * I canali che la UI offre SEMPRE come tab, anche a 0 conversazioni:
+ * «nessun WhatsApp» è uno stato, non un canale inesistente. Vivono nel
+ * dominio (e non nella pagina) perché la validazione del ?channel, le tab
+ * permanenti e il conteggio per canale devono restare coerenti tra loro:
+ * una sola lista, mai tre copie che divergono. Un canale nuovo della
+ * migration resta data-driven (compare da solo via GROUP BY).
+ *
+ * Definizione e merge puro: tickets-shared.ts (regole senza DB, testate
+ * direttamente); qui la re-esportazione per i consumatori del dominio e
+ * la funzione che legge il DB e usa il merge.
+ */
+export { KNOWN_CHANNELS, mergeChannelCounts } from "./tickets-shared";
+
+/**
+ * Regole pure dell'upgrade (migration 046): tag, escalation, merge.
+ * Definizione in tickets-shared.ts (zero import, testate direttamente
+ * in tests/ticketing-upgrade.test.mjs); qui la re-esportazione per i
+ * consumatori del dominio, come slaTier e awaitsReply.
+ */
+export {
+  sanitizeTags,
+  nextEscalationLevel,
+  escalationLabel,
+  canMerge,
+  ESCALATION_MAX,
+  TICKET_TAGS_MAX,
+  TICKET_TAG_MAX_LEN,
+  TICKET_TAG_VOCAB_MAX,
+} from "./tickets-shared";
+
+/**
  * Conteggio ticket per canale: le tab della inbox mostrano la scala di ogni
- * coda (web, whatsapp, …). Data-driven: un canale futuro (migration nuova)
- * compare da solo, senza toccare questa funzione.
+ * coda. Data-driven: un canale futuro (migration nuova) compare da solo,
+ * senza toccare questa funzione; i canali PERMANENTI compaiono sempre,
+ * anche a 0 — senza questa garanzia un ?channel=whatsapp su canale vuoto
+ * collassava in «tutti» mostrando le ALTRE chat sotto l'URL del canale
+ * (bug del 30/09/2026, scoperto pulendo lo scenario demo). Ordinamento:
+ * i permanenti in banda fissa (web, email, whatsapp), i non-noti dopo,
+ * per volume.
  */
 export async function countTicketsByChannel(): Promise<Record<string, number>> {
   const pool = db();
-  if (!pool) return {};
-  const { rows } = await pool.query<{ channel: string; n: number }>(
-    "select c.channel, count(*)::int as n from conversations c where c.archived_at is null group by c.channel order by n desc",
+  if (!pool) return mergeChannelCounts([]);
+  const { rows } = await pool.query<{ channel: string | null; n: number }>(
+    "select c.channel, count(*)::int as n from conversations c where c.archived_at is null and c.merged_into is null group by c.channel order by n desc",
   );
-  const out: Record<string, number> = {};
-  for (const r of rows) out[r.channel ?? "web"] = r.n;
-  return out;
+  return mergeChannelCounts(rows);
+}
+
+/**
+ * Tag in uso nella coda (pillole del filtro ?tag= in inbox):
+ * conteggi sulle conversazioni VIVE (non archiviate, non fuse),
+ * per volume poi alfabetici. Data-driven: un tag nuovo compare
+ * da solo, senza toccare la pagina.
+ */
+export async function getTicketTagCounts(): Promise<{ tag: string; n: number }[]> {
+  const pool = db();
+  if (!pool) return [];
+  const { rows } = await pool.query<{ tag: string; n: number }>(
+    `select tt.tag, count(*)::int as n
+     from ticket_tags tt
+     join conversations c on c.id = tt.conversation_id
+     where c.archived_at is null and c.merged_into is null
+     group by tt.tag
+     order by n desc, tt.tag`,
+  );
+  return rows;
 }
 
 /** Colonne condivise dalla lista, dal dettaglio e dall'archivio. */
 const TICKET_SELECT = `select c.id, c.number, c.initial_query, c.source_page, c.status, c.priority,
             c.assigned_to, o.first_name as assigned_name, c.created_at, c.updated_at,
             c.first_response_at, l.name as lead_name, l.phone as lead_phone, l.source as lead_source,
+            l.wa_phone,
             (select count(*) from messages m where m.conversation_id = c.id) as message_count,
             ${LAST_SENDER_SQL} as last_sender,
             (select m3.body from messages m3 where m3.conversation_id = c.id order by m3.created_at desc limit 1) as last_message_body,
-            c.sla_next_reply_due, c.sla_resolve_due, c.archived_at, c.channel, c.contact_email
+            c.sla_next_reply_due, c.sla_resolve_due, c.archived_at, c.channel, c.contact_email,
+            c.closed_at,
+            c.ai_takeover_at is not null as ambrosio_takeover,
+            c.followup_sent_at is not null as ambrosio_followup,
+            ${TAKEOVER_MANUALE_SQL} as ambrosio_manuale,
+            c.followup_disabled_at is not null as followup_disabled,
+            (select cc.client_id from client_conversations cc where cc.conversation_id = c.id limit 1) as client_id,
+            (select cl.name from client_conversations cc
+              join clients cl on cl.id = cc.client_id where cc.conversation_id = c.id limit 1) as client_name,
+            c.escalation_level, c.escalation_at, c.merged_into, c.merged_at,
+            (select array_agg(tt.tag order by tt.tag) from ticket_tags tt where tt.conversation_id = c.id) as tags,
+            (select c2.number from conversations c2 where c2.id = c.merged_into) as merged_into_number
      from conversations c
      left join operators o on o.id = c.assigned_to
      left join leads l on l.id = c.lead_id`;
@@ -401,6 +577,22 @@ export async function getTicket(id: string): Promise<TicketRow | null> {
   const pool = db();
   if (!pool) return null;
   const { rows } = await pool.query<TicketRow>(`${TICKET_SELECT} where c.id = $1`, [id]);
+  return rows[0] ?? null;
+}
+
+/**
+ * Ticket dal suo NUMERO (il merge lavora per numero: è ciò che
+ * l'agente vede in inbox e condivide a voce). La destinazione di
+ * un merge deve essere VIVA: un ticket già fuso non può assorbirne
+ * altri (canMerge, regola pura in tickets-shared.ts).
+ */
+export async function getTicketByNumber(number: number): Promise<TicketRow | null> {
+  const pool = db();
+  if (!pool) return null;
+  const { rows } = await pool.query<TicketRow>(
+    `${TICKET_SELECT} where c.number = $1 and c.merged_into is null`,
+    [String(number)],
+  );
   return rows[0] ?? null;
 }
 
@@ -423,6 +615,55 @@ export const CHAT_EMOJIS_MAX = 24;
 export const QUICK_REPLIES_KEY = "ticket_quick_replies";
 export const QUICK_REPLIES_MAX = 8;
 
+/** Vocabolario dei tag (migration 046): i tag suggeriti
+ *  dalla datalist dell'editor, editabili da
+ *  /admin/settings/tag-vocabolario. Array JSON di stringhe;
+ *  vuoto = nessun suggerimento (i tag liberi funzionano
+ *  sempre — il vocabolario suggerisce, non vincola). */
+export const TAG_VOCABULARY_KEY = "ticket_tag_vocabulary";
+
+/* ==========================================================================
+   CONTENT_SETTINGS UNA VOLTA PER RICHIESTA (ADR-005 esteso: ticket_sla_policy,
+   chat_emoji_picker e ticket_quick_replies condividevano lo stesso destino
+   dell'auth — più letture identiche nella stessa navigazione, ognuna con il
+   suo round-trip). Lo snapshot è UNA query `key = any(...)` memoizzata con
+   cache() di React; la chiave della memoizzazione è la VERSIONE del processo:
+   le action che scrivono queste chiavi la incrementano
+   (bumpContentSettingsVersion), così il render della STESSA richiesta dopo il
+   salvataggio rilegge fresco invece di rispettare lo snapshot — e le
+   richieste nuove (versione corrente) restano una query sola.
+   ========================================================================== */
+
+/** Le chiavi note dello snapshot: un canale nuovo entra aggiungendole qui. */
+const CONTENT_SETTINGS_KEYS = [SLA_POLICY_KEY, CHAT_EMOJIS_KEY, QUICK_REPLIES_KEY, TAG_VOCABULARY_KEY];
+
+/** Versione del processo: la usano le action di scrittura (vedi bump). */
+let contentSettingsVersion = 0;
+
+/** Invalida lo snapshot per-request dopo una scrittura su content_settings. */
+export function bumpContentSettingsVersion(): void {
+  contentSettingsVersion += 1;
+}
+
+const memoizedSnapshot = cache(
+  async (version: number): Promise<Record<string, unknown>> => {
+    void version; // la versione entra nella chiave del cache(): stessa versione = stessa Promise
+    const pool = db();
+    if (!pool) return {};
+    const { rows } = await pool.query<{ key: string; value: unknown }>(
+      "select key, value from content_settings where key = any($1)",
+      [CONTENT_SETTINGS_KEYS],
+    );
+    const out: Record<string, unknown> = {};
+    for (const r of rows) out[r.key] = r.value;
+    return out;
+  },
+);
+
+function snapshotPerRichiesta(): Promise<Record<string, unknown>> {
+  return memoizedSnapshot(contentSettingsVersion);
+}
+
 /**
  * Emoji del picker della chat pubblica: salvate in content_settings,
  * editabili da /admin/settings/emoji-chat. Con il DB assente si torna il
@@ -432,13 +673,7 @@ export const QUICK_REPLIES_MAX = 8;
  * picker sono cerchi da 44px, non testi.
  */
 export async function getChatEmojis(): Promise<string[]> {
-  const pool = db();
-  if (!pool) return [...CHAT_EMOJIS_DEFAULT];
-  const { rows } = await pool.query<{ value: unknown }>(
-    "select value from content_settings where key = $1",
-    [CHAT_EMOJIS_KEY],
-  );
-  const raw = rows[0]?.value;
+  const raw = (await snapshotPerRichiesta())[CHAT_EMOJIS_KEY];
   if (!Array.isArray(raw)) return [...CHAT_EMOJIS_DEFAULT];
   const list = raw
     .filter((x): x is string => typeof x === "string")
@@ -453,13 +688,7 @@ export async function getChatEmojis(): Promise<string[]> {
  * degradato, come da convenzione del progetto).
  */
 export async function getQuickReplies(): Promise<string[]> {
-  const pool = db();
-  if (!pool) return [...QUICK_REPLIES_DEFAULT];
-  const { rows } = await pool.query<{ value: unknown }>(
-    "select value from content_settings where key = $1",
-    [QUICK_REPLIES_KEY],
-  );
-  const raw = rows[0]?.value;
+  const raw = (await snapshotPerRichiesta())[QUICK_REPLIES_KEY];
   if (!Array.isArray(raw)) return [...QUICK_REPLIES_DEFAULT];
   const list = raw
     .filter((x): x is string => typeof x === "string")
@@ -467,6 +696,21 @@ export async function getQuickReplies(): Promise<string[]> {
     .filter(Boolean)
     .slice(0, QUICK_REPLIES_MAX);
   return list.length ? list : [...QUICK_REPLIES_DEFAULT];
+}
+
+/**
+ * Vocabolario canonico dei tag (impostazioni → tag): è ciò che
+ * la datalist suggerisce nell'editor dei tag del ticket. Vuoto =
+ * nessun suggerimento (l'agente scrive liberamente: i tag non
+ * hanno default, a differenza delle risposte rapide).
+ */
+export async function getTicketTagVocabulary(): Promise<string[]> {
+  const raw = (await snapshotPerRichiesta())[TAG_VOCABULARY_KEY];
+  if (!Array.isArray(raw)) return [];
+  return sanitizeTags(
+    raw.filter((x): x is string => typeof x === "string"),
+    TICKET_TAG_VOCAB_MAX,
+  );
 }
 
 /** Timestamp dell'ultimo messaggio sul ticket: per il polling live del dettaglio. */
@@ -489,7 +733,7 @@ export async function listArchivedTickets(limit = 10): Promise<TicketRow[]> {
   if (!pool) return [];
   const { rows } = await pool.query<TicketRow>(
     `${TICKET_SELECT}
-     where c.archived_at is not null
+     where c.archived_at is not null and c.merged_into is null
      order by c.archived_at desc
      limit $1`,
     [String(limit)],
@@ -515,11 +759,18 @@ export async function listTickets(
    *  devono restare allineate al PAGE_SIZE — con l'offset su `limit` la
    *  pagina 2 partiva dalla riga 62 e la 61 saltava per sempre. */
   pageSize?: number,
+  /** Filtro per tag (migration 046): la inbox mostra i ticket
+   *  che portano questo tag. Parametrizzato (non interpolato):
+   *  il tag arriva dall'URL e cerca una chiave esatta. */
+  tag?: string | null,
 ): Promise<TicketRow[]> {
   const pool = db();
   if (!pool) return [];
   const f = ticketFilterSql(filter, operatorId);
   const params: string[] = [...f.params];
+  // Ticket fusi (merge duplicati): fuori da ogni lista. Restano
+  // leggibili dal loro permalink con il banner «fuso in #N».
+  const notMerged = " and c.merged_into is null";
   // Inbox per canale (chat web vs WhatsApp): il valore arriva dalla tab dei
   // canali; «tutti» non aggiunge condizioni. Validato a livello app perché
   // è un parametro interpolato nella stringa (lista di valori nota).
@@ -527,10 +778,20 @@ export async function listTickets(
   if (channel && channel !== "all") {
     channelSql = ` and c.channel = '${channel.replace(/'/g, "''")}'`;
   }
+  // Filtro tag: EXISTS sull'indice ticket_tags_tag_idx — la
+  // ricerca per tag è un lookup, non una scansione.
+  let tagSql = "";
+  if (tag?.trim()) {
+    params.push(tag.trim());
+    const tagParam = `$${params.length}`;
+    tagSql = ` and exists (select 1 from ticket_tags tt where tt.conversation_id = c.id and tt.tag = ${tagParam})`;
+  }
   let searchSql = "";
   const term = q?.trim();
   if (term) {
-    params.push(`%${term}%`);
+    // Wildcard dell'utente letteralizzati (likeContains, regola pura in
+    // tickets-shared): «100%» cerca «100%», non «100» + qualunque cosa.
+    params.push(likeContains(term));
     const like = `$${params.length}`;
     params.push(term);
     const exact = `$${params.length}`;
@@ -542,7 +803,7 @@ export async function listTickets(
   const offsetParam = `$${params.length}`;
   const { rows } = await pool.query<TicketRow>(
     `${TICKET_SELECT}
-     where ${f.sql}${channelSql}${searchSql}
+     where ${f.sql}${notMerged}${channelSql}${tagSql}${searchSql}
      order by
        -- I ticket che aspettano una risposta umana vengono prima: non devono
        -- affondare sotto ticket movimentati ma già gestiti.

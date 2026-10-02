@@ -1,18 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
 import { CheckCircle2, ExternalLink, LoaderCircle, Power } from "lucide-react";
 import { GlassButton } from "@/components/glass";
 import { saveMaintenanceSettings } from "@/app/admin/actions";
+import { toastSaved } from "@/components/admin-toaster";
 import type { MaintenanceConfig } from "@/lib/maintenance-shared";
 
 /**
- * Pannello della modalità manutenzione (Tools → Manutenzione): switch con
- * conferma esplicita a due fasi, messaggio ai visitatori e promessa «torna
- * online». Le action server del repo restano void: l'esito vero è lo stato
- * che la pagina rilegge dal DB dopo il revalidate — il pannello non inventa
- * un esito che non ha verificato.
+ * Pannello della modalità manutenzione (Tools → Manutenzione):
+ * switch on/off come la sveglia di iOS (pill verde quando accesa,
+ * grigio quando spenta, knob che scorre), messaggio ai visitatori
+ * e promessa «torna online». Lo switch è a stato ottimistico con
+ * richieste IN CATENA nell'ordine dei click: l'ultimo click vince
+ * sempre, anche a raffica; su errore la UI si riallinea ai dati
+ * reali del DB con un refresh. Le action server del repo restano
+ * void: l'esito vero è lo stato che la pagina rilegge dal DB dopo
+ * il revalidate — il pannello non inventa un esito che non ha
+ * verificato.
  */
 
 function SubmitButton({ label, variant }: { label: string; variant: "primary" | "danger" | "glass" }) {
@@ -26,10 +34,37 @@ function SubmitButton({ label, variant }: { label: string; variant: "primary" | 
 }
 
 export default function MaintenancePanel({ config }: { config: MaintenanceConfig }) {
-  const [confirming, setConfirming] = useState(false);
   const [message, setMessage] = useState(config.message);
   const [backOnline, setBackOnline] = useState(config.backOnline);
-  const active = config.active;
+  const [active, setActive] = useState(config.active);
+  const [pending, setPending] = useState(false);
+  const latest = useRef(config.active);
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const reduce = useReducedMotion();
+  const router = useRouter();
+
+  function flip() {
+    const next = !latest.current;
+    latest.current = next;
+    setActive(next); // UI immediata: il cancello risponde al click, non al round-trip
+    const fd = new FormData();
+    fd.set("active", String(next));
+    fd.set("message", message);
+    fd.set("backOnline", backOnline);
+    setPending(true);
+    const me = next;
+    chain.current = chain.current
+      .then(() => saveMaintenanceSettings(fd))
+      .then(() => {
+        if (latest.current === me) toastSaved("maintenance_toggle");
+      })
+      .catch(() => {
+        if (latest.current === me) router.refresh();
+      })
+      .finally(() => {
+        if (latest.current === me) setPending(false);
+      });
+  }
 
   return (
     <div className="space-y-4">
@@ -45,30 +80,41 @@ export default function MaintenancePanel({ config }: { config: MaintenanceConfig
               : "Il sito è regolare: nessuna pagina sostitutiva viene servita al pubblico."}
           </p>
         </div>
-        {!confirming ? (
-          <GlassButton type="button" variant={active ? "glass" : "danger"} onClick={() => setConfirming(true)}>
-            {active ? "Spegni la manutenzione" : "Attiva la manutenzione"}
-            <Power className="h-4 w-4" aria-hidden />
-          </GlassButton>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-amber-50 p-3">
-            <p className="w-full text-xs font-medium text-amber-900 sm:hidden sm:w-auto">
-              {active ? "Riporto il sito online?" : "Chiudo il sito pubblico?"}
-            </p>
-            <form action={saveMaintenanceSettings} className="flex items-center gap-2">
-              <input type="hidden" name="active" value={String(!active)} />
-              <input type="hidden" name="message" value={message} />
-              <input type="hidden" name="backOnline" value={backOnline} />
-              <SubmitButton
-                label={active ? "Sì, torna online" : "Sì, attiva ora"}
-                variant={active ? "primary" : "danger"}
-              />
-            </form>
-            <GlassButton type="button" variant="ghost" onClick={() => setConfirming(false)}>
-              Annulla
-            </GlassButton>
-          </div>
-        )}
+        {/* Switch on/off come la sveglia di iOS: pill verde quando
+            accesa, grigio quando spenta, knob bianco che scorre.
+            L'attivazione è immediata (il cancello rilegge la
+            config): il click è la conferma, l'esito vero lo rilegge
+            la pagina dal DB dopo il salvataggio. */}
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={active}
+            aria-label="Manutenzione"
+            onClick={flip}
+            className={`relative h-[30px] w-[52px] shrink-0 rounded-full transition-colors duration-300 ${
+              active ? "bg-[#34C759]" : "bg-slate-300/90"
+            } ${pending ? "opacity-60" : ""}`}
+          >
+            {/* aria-hidden: lo stato è già letto da aria-checked sul bottone */}
+            <motion.span
+              aria-hidden
+              className="absolute top-[2px] left-[2px] h-[26px] w-[26px] rounded-full bg-white shadow-[0_2px_6px_rgba(0,0,0,0.25)]"
+              initial={false}
+              animate={{ x: active ? 22 : 0, scale: active ? 1 : 0.92 }}
+              transition={
+                reduce
+                  ? { duration: 0.01 }
+                  : { type: "spring", stiffness: 500, damping: 32, mass: 0.9 }
+              }
+            />
+          </button>
+          {pending && (
+            <span className="sr-only" role="status">
+              Salvataggio…
+            </span>
+          )}
+        </div>
       </div>
 
       <form action={saveMaintenanceSettings} className="space-y-4 rounded-2xl bg-white/55 p-4 ring-1 ring-white/60">

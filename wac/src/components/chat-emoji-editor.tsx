@@ -7,6 +7,7 @@ import {
   ArrowUp,
   LoaderCircle,
   Plus,
+  RotateCcw,
   Search,
   Trash2,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { CHAT_EMOJI_CATALOG } from "@/components/chat/chat-emoji-data";
  * con ricerca in italiano — le stesse etichette e tag che poi guidano la
  * ricerca nel picker pubblico, stessa fonte (chat-emoji-data.ts).
  * Le righe si riordinano: l'ordine è il menu che vedono i visitatori.
+ * «Ripristina predefinite» riporta il set al canone in un click.
  * Salvataggio su DB via server action; dopo il salvataggio router.refresh()
  * riallinea la lista al canonico del server. Il set vuoto è ammesso: il
  * client della chat torna allora sul set predefinito.
@@ -38,11 +40,11 @@ function normalize(s: string): string {
 export default function ChatEmojiEditor({
   initial,
   max,
-  defaultCount,
+  defaults,
 }: {
   initial: string[];
   max: number;
-  defaultCount: number;
+  defaults: readonly string[];
 }) {
   const [rows, setRows] = useState<string[]>(initial.length ? initial : [""]);
   const [query, setQuery] = useState("");
@@ -95,6 +97,12 @@ export default function ChatEmojiEditor({
     });
   }
 
+  function restoreDefaults() {
+    // Un click: il set torna interamente al canone. Il slice tiene
+    // il cap (max) anche se il default crescesse oltre.
+    setRows(defaults.slice(0, max));
+  }
+
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (saving) return;
@@ -134,7 +142,7 @@ export default function ChatEmojiEditor({
           role="listbox"
           aria-label="Catalogo emoji"
           aria-multiselectable
-          className="mt-3 grid max-h-44 grid-cols-[repeat(auto-fill,minmax(3rem,1fr))] gap-1 overflow-y-auto"
+          className="mt-3 grid max-h-44 grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-1 overflow-y-auto"
         >
           {catalogResults.map((c) => {
             const selected = currentSet.has(c.emoji);
@@ -144,18 +152,24 @@ export default function ChatEmojiEditor({
                 type="button"
                 role="option"
                 aria-selected={selected}
-                title={selected ? `${c.label} — già nel set` : c.label}
-                onClick={() => addEmoji(c.emoji)}
-                disabled={selected || !canAdd}
-                className={`flex h-12 w-12 items-center justify-center rounded-xl text-2xl transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
-                  selected
-                    ? "bg-brand-600/15 ring-1 ring-brand-600/40"
-                    : "hover:bg-white/90 active:scale-95 disabled:opacity-40"
+              title={`${c.label}${selected ? " — già nel set" : ""} (${c.tags.join(", ")})`}
+              onClick={() => addEmoji(c.emoji)}
+              disabled={selected || !canAdd}
+              className={`flex h-auto min-h-12 w-full flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-2xl transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${
+                selected
+                  ? "bg-brand-600/15 ring-1 ring-brand-600/40"
+                  : "hover:bg-white/90 active:scale-95 disabled:opacity-40"
+              }`}
+            >
+              <span aria-hidden>{c.emoji}</span>
+              <span
+                className={`max-w-full truncate text-[10px] font-medium leading-tight ${
+                  selected ? "text-brand-700" : "text-slate-500"
                 }`}
               >
-                <span aria-hidden>{c.emoji}</span>
-                <span className="sr-only">{c.label}</span>
-              </button>
+                {c.label}
+              </span>
+            </button>
             );
           })}
           {catalogResults.length === 0 && (
@@ -216,15 +230,26 @@ export default function ChatEmojiEditor({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={addRow}
-          disabled={rows.length >= max}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/50 bg-white/60 px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-40"
-        >
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          Riga libera
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={addRow}
+            disabled={rows.length >= max}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/50 bg-white/60 px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:opacity-40"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Riga libera
+          </button>
+          <button
+            type="button"
+            onClick={restoreDefaults}
+            title={`Riempie le righe con le ${defaults.length} emoji predefinite`}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-white/50 bg-white/60 px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-white/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+            Ripristina predefinite
+          </button>
+        </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-400">
             {filled}/{max} emoji
@@ -266,7 +291,7 @@ export default function ChatEmojiEditor({
 
       {filled === 0 && (
         <p className="rounded-xl bg-amber-50/80 p-2.5 text-xs text-amber-900 ring-1 ring-amber-200/60">
-          Con zero emoji salvate il picker torna sulle {defaultCount} predefinite.
+          Con zero emoji salvate il picker torna sulle {defaults.length} predefinite.
         </p>
       )}
     </form>

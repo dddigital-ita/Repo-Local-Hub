@@ -1,7 +1,6 @@
 "use client";
 
-import { motion, useReducedMotion, type Variants } from "framer-motion";
-import type { ReactNode } from "react";
+import { Children, cloneElement, isValidElement, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 
 /**
  * Primitive di animazione stile Apple per i reveal allo scorrimento.
@@ -9,32 +8,53 @@ import type { ReactNode } from "react";
  * ⚠️ Lezione dal bug delle "card staccate": era causato dalle card-link rimaste
  * `display: inline` dentro i wrapper RevealItem (background spezzato per righe).
  * Cura: `a.glass-solid { display: block }` in globals.css + classe `block` sulle card.
- * Con ciò i reveal possono usare slide+fade completi senza artefatti.
+ *
+ * ── PERCHÉ NIENTE FRAMER-MOTION QUI ─────────────────────────────────────────
+ * Questi primitive vivono in OGNI pagina pubblica (home, 17 landing, privacy…):
+ * con framer-motion portavano ~70 kB gzip nel first load dei visitatori solo
+ * per dissolvenze. Da 2026-09-30 sono IntersectionObserver + transizioni CSS:
+ * stessa estetica (spring iOS approssimato con cubic-bezier), API IDENTICA per
+ * i consumatori (Reveal/RevealGroup/RevealItem con stagger/amount/delay) e
+ * zero KB di JS di animazione. framer-motion resta dove il payload non pesa
+ * sui visitatori: /admin e /consulenza (Chat).
+ *
+ * Riduced-motion: il CSS lo rispetta da solo via media query in globals.css.
  */
 
-/** Spring "gentle": per dissolvenze di sezioni e card. */
-export const springSoft = { type: "spring", stiffness: 170, damping: 22, mass: 1 } as const;
+/** Spring "gentle" → curva CSS equivalente (attacco morbido, rilascio lungo). */
+export const EASE_SOFT = "cubic-bezier(0.22, 1, 0.36, 1)";
 
-/** Spring "snappy": per bottoni, chip, micro-interazioni. */
-export const springSnappy = { type: "spring", stiffness: 420, damping: 30, mass: 0.8 } as const;
+/** Spring "snappy" per bottoni/chip (micro-interazioni). */
+export const EASE_SNAPPY = "cubic-bezier(0.34, 1.3, 0.64, 1)";
 
-/** Varianti per contenitori con figli in sequenza (stagger). */
-export function staggerChildren(stagger = 0.08, delay = 0): Variants {
-  return {
-    hidden: {},
-    shown: { transition: { staggerChildren: stagger, delayChildren: delay } },
-  };
+/**
+ * Hook condiviso: aggiunge la classe `is-revealed` quando l'elemento entra nel
+ * viewport (una volta sola, soglia `amount`). Gli stili partono nascosti in
+ * globals.css (.rv / .rv-item) e si accendono con la transizione.
+ */
+function useReveal<T extends HTMLElement>(amount: number) {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      el.classList.add("is-revealed");
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          el.classList.add("is-revealed");
+          io.disconnect();
+        }
+      },
+      { threshold: amount },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [amount]);
+  return ref;
 }
-
-/** Varianti del figlio: dissolvenza + leggera salita (stile iOS). */
-export const childFade: Variants = {
-  hidden: { opacity: 0, y: 18 },
-  shown: { opacity: 1, y: 0, transition: springSoft },
-};
-
-/** Compat: alias deprecati (nessun transform). */
-export const hiddenUp = { opacity: 0 };
-export const shownUp = { opacity: 1 };
 
 /**
  * Reveal allo scroll: dissolve quando entra nel viewport, una volta sola.
@@ -50,17 +70,15 @@ export function Reveal({
   delay?: number;
   amount?: number;
 }) {
-  const reduce = useReducedMotion();
+  const ref = useReveal<HTMLDivElement>(amount);
   return (
-    <motion.div
-      className={className}
-      initial={reduce ? false : { opacity: 0, y: 20 }}
-      whileInView={reduce ? undefined : { opacity: 1, y: 0 }}
-      viewport={{ once: true, amount }}
-      transition={{ ...springSoft, delay }}
+    <div
+      ref={ref}
+      className={`rv ${className ?? ""}`}
+      style={delay ? ({ "--rv-delay": `${delay}s` } as React.CSSProperties) : undefined}
     >
       {children}
-    </motion.div>
+    </div>
   );
 }
 
@@ -78,21 +96,42 @@ export function RevealGroup({
   delay?: number;
   amount?: number;
 }) {
-  const reduce = useReducedMotion();
+  const ref = useReveal<HTMLDivElement>(amount);
+  // Ogni figlio riceve il proprio indice: il delay staggerato è calc() in CSS
+  // (calcolato dal browser, zero JS durante l'animazione). Se il figlio è già
+  // un RevealItem (rv-item) NON lo incarto: gli clono l'indice, altrimenti
+  // verrebbe un doppio wrapper con doppio transform.
+  const items = Children.toArray(children).map((child, i) => {
+    if (child === null || child === undefined) return null;
+    if (isValidElement(child) && typeof child.props === "object" && child.props !== null && "className" in child.props && String((child.props as { className?: unknown }).className ?? "").includes("rv-item")) {
+      return cloneElement(child, { key: i, ...({ "--i": i } as CSSProperties) });
+    }
+    return (
+      <StaggerSlot key={i} index={i}>
+        {child}
+      </StaggerSlot>
+    );
+  });
   return (
-    <motion.div
-      className={className}
-      initial={reduce ? false : "hidden"}
-      whileInView="shown"
-      viewport={{ once: true, amount }}
-      variants={staggerChildren(stagger, delay)}
+    <div
+      ref={ref}
+      className={`rv-group ${className ?? ""}`}
+      style={{ "--rv-stagger": `${stagger}s`, "--rv-delay": `${delay}s` } as CSSProperties}
     >
-      {children}
-    </motion.div>
+      {items}
+    </div>
   );
 }
 
-/** Figlio di RevealGroup: solo dissolvenza. */
+function StaggerSlot({ index, children }: { index: number; children: ReactNode }) {
+  return (
+    <div className="rv-item" style={{ "--i": index } as CSSProperties}>
+      {children}
+    </div>
+  );
+}
+
+/** Figlio di RevealGroup: solo dissolvenza (il ritardo viene dal gruppo). */
 export function RevealItem({
   children,
   className,
@@ -100,9 +139,5 @@ export function RevealItem({
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <motion.div className={className} variants={childFade}>
-      {children}
-    </motion.div>
-  );
+  return <div className={`rv-item ${className ?? ""}`}>{children}</div>;
 }

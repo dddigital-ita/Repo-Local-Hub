@@ -154,7 +154,7 @@ export default async function AdminHome() {
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           Funnel: visita → ricerca → chat → lead → chiamata. Gli eventi GA4 completi sono in{" "}
-          <Link href="/admin/tools/google" className="text-brand-700 underline">Google growth kit</Link>.
+          <Link href="/admin/settings/google" className="text-brand-700 underline">Google growth kit</Link>.
         </p>
       </div>
 

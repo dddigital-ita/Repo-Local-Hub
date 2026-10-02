@@ -1,8 +1,12 @@
 import { db } from "@/lib/db";
+import { cache } from "react";
+import { readThroughDbConfig } from "@/lib/db-config-cache";
 import { getNotionSettings } from "@/lib/notion";
 import { getGoogleToolsConfig } from "@/lib/google-tools";
 import { getDriveConfig } from "@/lib/drive";
+import { getOneDriveConfig } from "@/lib/onedrive";
 import { getGCalConfig } from "@/lib/google-calendar";
+import { HUB_CONFIG_KEY, HUB_DEFAULTS, hubConfigValidated, type HubConfig } from "@/lib/calendar-hub-shared";
 import { googleKitStatus } from "@/lib/tools-status";
 import { INTEGRATION_DEFS, type IntegrationDef } from "@/lib/integrations-registry";
 
@@ -23,9 +27,11 @@ export type IntegrationStatus = {
   meta: string[];
 };
 
-/** 「in coda」+ «Ultimo sync» per Notion, letti come già faceva l'hub. */
+/** 「in coda」+ «Ultimo sync» per Notion. La config passa dal TTL condiviso
+ *  (60s, ADR-005 esteso: cambia solo a salvataggio); la coda e l'ultimo sync
+ *  restano letture DB vive (operationale, non configurazione). */
 async function readNotion(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "label" | "counts" | "meta">> {
-  const notion = await getNotionSettings();
+  const notion = await readThroughDbConfig("notion_settings", getNotionSettings);
   const ok = Boolean(notion?.enabled && notion.hasKey);
   const pool = db();
   let pending: number | null = null;
@@ -59,9 +65,9 @@ async function readNotion(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "la
   };
 }
 
-/** Google: collegato solo con credenziali Search Console API (le query reali di /admin/seo). La regola vive nella funzione pura condivisa con l'hub Tools. */
+/** Google: collegato solo con credenziali Search Console API (le query reali di /admin/seo). La regola vive nella funzione pura condivisa con l'hub Tools. Config via TTL condiviso (60s, cambia solo a salvataggio). */
 async function readGoogle(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "label" | "counts" | "meta">> {
-  const google = await getGoogleToolsConfig();
+  const google = await readThroughDbConfig("google_tools", getGoogleToolsConfig);
   const s = googleKitStatus(google.hasGscCreds, [google.ga4Id, google.gtmId].filter(Boolean).length);
   return { ok: s.ok, warn: s.warn, label: s.label, counts: s.counts, meta: [] };
 }
@@ -73,7 +79,8 @@ async function readGoogle(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "la
  * condivisa — solo il test reale lo dimostra.
  */
 async function readDrive(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "label" | "counts" | "meta">> {
-  const drive = await getDriveConfig();
+  // Config (credenziali + esiti test) via TTL condiviso: cambia a salvataggio o test esplicito.
+  const drive = await readThroughDbConfig("drive_config", getDriveConfig);
   if (!drive.hasCreds) {
     return { ok: false, warn: true, label: "Da collegare", counts: [], meta: [] };
   }
@@ -103,7 +110,8 @@ async function readDrive(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "lab
  * finisce in due posti, non uno.
  */
 async function readGCal(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "label" | "counts" | "meta">> {
-  const gcal = await getGCalConfig();
+  // Config (credenziali + esiti test) via TTL condiviso: cambia a salvataggio o test esplicito.
+  const gcal = await readThroughDbConfig("gcal_config", getGCalConfig);
   if (!gcal.hasCreds || !gcal.calendarId) {
     return { ok: false, warn: true, label: "Da collegare", counts: [], meta: [] };
   }
@@ -130,26 +138,159 @@ async function readGCal(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "labe
   };
 }
 
+/**
+ * OneDrive: stessa semantica di Drive — credenziali salvate =
+ * «Da verificare» (il salvataggio da solo non dimostra che
+ * l'app sia registrata, i permessi concessi e Graph raggiungibile);
+ * dopo un test riuscito diventa «Collegato».
+ */
+async function readOneDrive(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "label" | "counts" | "meta">> {
+  // Config (credenziali + esiti test) via TTL condiviso: cambia a salvataggio o test esplicito.
+  const od = await readThroughDbConfig("onedrive_config", getOneDriveConfig);
+  if (!od.hasCreds) {
+    return { ok: false, warn: true, label: "Da collegare", counts: [], meta: [] };
+  }
+  const ok = od.lastTestOk === true;
+  return {
+    ok,
+    warn: !ok,
+    label: ok ? "Collegato" : "Da verificare",
+    counts: [],
+    meta: od.lastTestAt
+      ? [
+          `Ultimo test: ${new Date(od.lastTestAt).toLocaleDateString("it-IT", { day: "numeric", month: "short" })}`,
+          od.clientId ?? "",
+        ].filter(Boolean)
+      : od.clientId
+        ? [od.clientId]
+        : [],
+  };
+}
+
+/** Config del calendar hub (037) + flag feed: la view che serve
+ *  al reader (hubConfigValidated scarta exportTokenHash, che
+ *  invece dice se il feed .ics del team ha un token). */
+type HubConfigView = HubConfig & { exportTokenSet: boolean };
+
+async function readHubConfigView(): Promise<HubConfigView> {
+  const pool = db();
+  if (!pool) return { ...HUB_DEFAULTS, exportTokenSet: false };
+  try {
+    const { rows } = await pool.query<{ value: unknown }>(
+      "select value from content_settings where key = $1",
+      [HUB_CONFIG_KEY],
+    );
+    const raw = rows[0]?.value as { exportTokenHash?: unknown } | null;
+    return {
+      ...hubConfigValidated(raw),
+      exportTokenSet: Boolean(raw && typeof raw.exportTokenHash === "string" && raw.exportTokenHash),
+    };
+  } catch {
+    return { ...HUB_DEFAULTS, exportTokenSet: false };
+  }
+}
+
+/**
+ * iCal: le sorgenti esterne del calendar hub (migration 037)
+ * e il feed di esportazione .ics del team. Nessuna chiave da
+ * incollare: la configurazione sono gli URL delle sorgenti
+ * (pull) e l'hash del token di esportazione — entrambi nella
+ * stessa riga calendar_hub_config.
+ */
+async function readIcal(): Promise<Pick<IntegrationStatus, "ok" | "warn" | "label" | "counts" | "meta">> {
+  // Config via TTL condiviso (60s, ADR-005): cambia a salvataggio o rotazione token.
+  const cfg = await readThroughDbConfig("calendar_hub_config", readHubConfigView);
+  const total = cfg.icalUrls.length;
+  const active = cfg.icalUrls.filter((s) => s.enabled).length;
+  const pool = db();
+  let imported = 0;
+  if (pool) {
+    try {
+      const q = await pool.query<{ n: string }>(
+        "select count(*) as n from calendar_items where origin = 'ical'",
+      );
+      imported = Number(q.rows[0]?.n ?? 0);
+    } catch {
+      // tabella non ancora migrata
+    }
+  }
+  const feed = cfg.exportTokenSet ? "feed esportazione attivo" : "";
+  if (total === 0) {
+    return { ok: false, warn: true, label: "Da collegare", counts: [], meta: feed ? [feed] : [] };
+  }
+  return {
+    ok: cfg.pullEnabled,
+    warn: false,
+    label: cfg.pullEnabled ? "Attivo" : "Collegato",
+    counts: [{ n: active, label: "sorgenti" }],
+    meta: [
+      imported > 0 ? `${imported} eventi importati` : "",
+      cfg.pullEnabled ? "pull attivo" : "pull spento",
+      feed,
+    ].filter(Boolean),
+  };
+}
+
 const READERS: Record<string, () => Promise<Partial<IntegrationStatus>>> = {
   notion: readNotion,
   google: readGoogle,
   drive: readDrive,
   gcal: readGCal,
+  onedrive: readOneDrive,
+  ical: readIcal,
 };
 
 /**
  * Stato di UNA integrazione per chiave — il modo pulito per un'altra pagina
  * (es. hub Tools) di riusare gli stessi reader senza duplicare query.
+ *
+ * ADR-005 (fan-out): esegue SOLO il reader richiesto. La versione precedente
+ * delegava a getIntegrationStatuses() e pagava TUTTI i reader (Notion, Google,
+ * Drive, GCal) per tornare UNA pill: l'hub Tools eseguiva così il registro due
+ * volte (due chiamate = otto reader). Le funzioni memoizzate sono precostruite
+ * per chiave (identità stabile = dedup di cache() funzionante): le richieste
+ * che chiedono la STESSA chiave condividono la Promise, i diversi reader
+ * restano indipendenti.
  */
 export async function getIntegrationStatus(key: string): Promise<IntegrationStatus | null> {
   const def = INTEGRATION_DEFS.find((d) => d.key === key);
   if (!def) return null;
-  const statuses = await getIntegrationStatuses();
-  return statuses.find((s) => s.def.key === key) ?? null;
+  const single = CACHED_SINGLE[key];
+  if (!single) {
+    return { def, ok: false, warn: false, label: "Presente", counts: [], meta: [] };
+  }
+  try {
+    return await single();
+  } catch {
+    return { def, ok: false, warn: false, label: "Presente", counts: [], meta: [] };
+  }
 }
 
-/** Stato di TUTTE le integrazioni del registro, in ordine di definizione. */
-export async function getIntegrationStatuses(): Promise<IntegrationStatus[]> {
+/**
+ * UNA funzione memoizzata per richiesta (cache() di React) PER OGNI def del
+ * registro, precostruita a livello modulo: l'identità stabile della funzione
+ * è ciò che rende effettiva la dedup dentro la stessa richiesta. Il corpo
+ * ricalcola con lo stesso contratto di getIntegrationStatuses per quella def
+ * sola (fallback «Presente» senza reader, degradazione al chiamante).
+ */
+const CACHED_SINGLE: Record<string, () => Promise<IntegrationStatus>> = Object.fromEntries(
+  INTEGRATION_DEFS.map((def) => [
+    def.key,
+    cache(async (): Promise<IntegrationStatus> => {
+      const reader = READERS[def.key];
+      if (!reader) {
+        return { def, ok: false, warn: false, label: "Presente", counts: [], meta: [] };
+      }
+      const s = await reader();
+      return { def, ok: s.ok ?? false, warn: s.warn ?? false, label: s.label ?? "Presente", counts: s.counts ?? [], meta: s.meta ?? [] };
+    }),
+  ]),
+);
+
+/** Stato di TUTTE le integrazioni del registro, in ordine di definizione.
+ *  Memoizzato per richiesta (cache() di React): chi compone più hub nella
+ *  STESSA richiesta (Panoramica) paga una sola serie di letture. */
+export const getIntegrationStatuses = cache(async (): Promise<IntegrationStatus[]> => {
   return Promise.all(
     INTEGRATION_DEFS.map(async (def): Promise<IntegrationStatus> => {
       const reader = READERS[def.key];
@@ -165,4 +306,4 @@ export async function getIntegrationStatuses(): Promise<IntegrationStatus[]> {
       }
     }),
   );
-}
+});

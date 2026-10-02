@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import {
+import { notFound } from "next/navigation";import {
   ArrowLeft,
-  ArrowUpRight,
   Building2,
+  Download,
   Mail,
   MessageCircle,
   MessageSquare,
@@ -13,13 +12,11 @@ import {
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { getClient, channelLabel } from "@/lib/clients";
-import {
-  PRIORITY_LABEL,
-  PRIORITY_TONE,
-  STATUS_LABEL,
-  STATUS_TONE,
-} from "@/lib/tickets";
-import { saveClientNotesAction } from "@/app/admin/actions";
+import { waTicketHref } from "@/lib/tickets";
+import TicketQueueRow from "@/components/tickets/TicketQueueRow";
+import { getAppUser } from "@/lib/users";
+import { saveClientNotesAction, setClientTypeAction, salvaDittaAction, rigettaDittaAction } from "@/app/admin/actions";
+import { CLIENT_TYPES, CLIENT_TYPE_LABELS } from "@/lib/clients-shared";
 
 export const dynamic = "force-dynamic";
 
@@ -31,24 +28,13 @@ export const dynamic = "force-dynamic";
  * si aprono, non si modificano.
  */
 
-const AWAITING_TONE =
-  "bg-orange-50/90 text-orange-700 ring-1 ring-orange-200/70";
-
-/** Testo precompilato del WhatsApp contestuale: cita il ticket, il contesto
- *  esiste già dal primo «ciao» — il cliente non deve spiegare chi è. */
-function waTicketHref(waDigits: string, ticketNumber: number): string {
-  const text = encodeURIComponent(
-    `Buongiorno, la scrivo per il ticket #${ticketNumber} della Web Agency Crema.`,
-  );
-  return `https://wa.me/${waDigits}?text=${text}`;
-}
-
 export default async function ClientDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   await requireAdmin();
+  const user = await getAppUser();
   const { id } = await params;
   const pool = db();
   if (!pool)
@@ -129,9 +115,55 @@ export default async function ClientDetailPage({
                 Email
               </a>
             )}
+            {/* Export della storia: i SUOI ticket in un file, con le stesse
+                etichette di stato/priorità che legge nell'app. */}
+            <a
+              href={`/api/admin/clients.csv?id=${client.id}`}
+              download
+              className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white/60 px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-white/60 transition hover:bg-white/90"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Esporta CSV ({client.tickets.length})
+            </a>
           </div>
         </div>
       </div>
+
+      {/* Proposta ditta (038/039): il lead la citava, la scheda non la
+          sapeva. La scrittura esiste SOLO coi due bottoni — mai in
+          automatico al sync, mai «solo questa volta». Il rigetto (039)
+          spegne la proposta per quella ditta, definitivamente. */}
+      {client.azienda_suggerita && (
+        <div className="glass-solid flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-amber-200/60 bg-amber-50/40 p-4">
+          <p className="min-w-0 text-sm text-slate-700">
+            <strong className="font-semibold text-slate-900">{client.azienda_suggerita}</strong>{" "}
+            citata nei lead di questo cliente ({client.azienda_suggerita_citazioni} menzioni) ma non in scheda:
+            <span className="text-slate-500"> la salvi tu, non la scriviamo noi.</span>
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            <form action={salvaDittaAction}>
+              <input type="hidden" name="id" value={client.id} />
+              <input type="hidden" name="ditta" value={client.azienda_suggerita} />
+              <button
+                type="submit"
+                className="inline-flex min-h-9 items-center rounded-full bg-brand-600/90 px-4 py-1.5 text-xs font-semibold text-white shadow-glass-btn transition hover:bg-brand-700"
+              >
+                Salva «{client.azienda_suggerita}»
+              </button>
+            </form>
+            <form action={rigettaDittaAction}>
+              <input type="hidden" name="id" value={client.id} />
+              <input type="hidden" name="ditta" value={client.azienda_suggerita} />
+              <button
+                type="submit"
+                className="inline-flex min-h-9 items-center rounded-full bg-white/60 px-4 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-white/60 transition hover:bg-white/90"
+              >
+                Non è la sua ditta
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px] xl:items-start">
         {/* Ticket del cliente: i casi, su tutti i canali. */}
@@ -141,71 +173,22 @@ export default async function ClientDetailPage({
           </h2>
           <div className="grid gap-3">
             {client.tickets.map((t) => {
-              const waiting = t.last_sender === "visitor" && t.status !== "closed" && t.status !== "on_hold" && t.status !== "bot";
               const ticketWaDigits = t.wa_phone?.replace(/\D/g, "");
               return (
-                <div
+                <TicketQueueRow
                   key={t.id}
-                  className="group/ticket glass-solid block rounded-2xl p-4 transition hover:bg-white/60"
-                >
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <Link
-                      href={`/admin/tickets/${t.id}`}
-                      className="font-mono text-sm font-semibold tabular-nums text-brand-700 hover:underline"
-                    >
-                      #{t.number}
-                    </Link>
-                    <Link
-                      href={`/admin/tickets/${t.id}`}
-                      className="line-clamp-1 min-w-0 flex-1 text-sm font-semibold text-slate-900 hover:text-brand-700"
-                    >
-                      «{t.initial_query || "senza oggetto"}»
-                    </Link>
-                    {ticketWaDigits && (
-                      <a
-                        href={waTicketHref(ticketWaDigits, t.number)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`WhatsApp per il ticket #${t.number}`}
-                        className="inline-flex min-h-9 items-center gap-1 rounded-full bg-emerald-50/80 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200/60 transition hover:bg-emerald-100/80"
-                      >
-                        <MessageCircle className="h-3 w-3" aria-hidden />
-                        WhatsApp
-                      </a>
-                    )}
-                    <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover/ticket:text-brand-600" aria-hidden />
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-                    <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                      {t.channel === "email" ? (
-                        <Mail className="h-3 w-3" aria-hidden />
-                      ) : (
-                        <MessageSquare className="h-3 w-3" aria-hidden />
-                      )}
-                      {channelLabel(t.channel)}
-                    </span>
-                    <span aria-hidden className="text-slate-300">·</span>
-                    <span
-                      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${STATUS_TONE[t.status] ?? "bg-slate-100/80 text-slate-600 ring-1 ring-slate-200/70"}`}
-                    >
-                      {STATUS_LABEL[t.status] ?? t.status}
-                    </span>
-                    <span
-                      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${PRIORITY_TONE[t.priority] ?? ""}`}
-                    >
-                      {PRIORITY_LABEL[t.priority] ?? t.priority}
-                    </span>
-                    {waiting && (
-                      <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 font-semibold ${AWAITING_TONE}`}>
-                        Attende risposta
-                      </span>
-                    )}
-                    <span aria-hidden className="text-slate-300">·</span>
-                    <span className="whitespace-nowrap">
-                      {new Date(t.updated_at).toLocaleDateString("it-IT", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
-                </div>
+                  ticket={t}
+                  userOperatorId={user?.operatorId ?? null}
+                  channel={(() => {
+                    const Icon = t.channel === "email" ? Mail : MessageSquare;
+                    return { Icon, label: channelLabel(t.channel) };
+                  })()}
+                  whatsappLink={
+                    ticketWaDigits
+                      ? { href: waTicketHref(ticketWaDigits, t.number), label: `WhatsApp per il ticket #${t.number}` }
+                      : undefined
+                  }
+                />
               );
             })}
             {client.tickets.length === 0 && (
@@ -217,8 +200,38 @@ export default async function ClientDetailPage({
           </div>
         </div>
 
-        {/* Colonna strumenti: nota + ultimi messaggi (contesto rapido). */}
+        {/* Colonna strumenti: tipo + nota + ultimi messaggi (contesto rapido). */}
         <div className="space-y-4 xl:sticky xl:top-28">
+          {/* Tipo cliente (038): la classificazione è un gesto umano — la
+              sync di Ambrosio non congettura. Dominio e etichette leggono
+              la costante tipizzata di clients-shared (fonte unica). */}
+          <div className="glass-solid rounded-3xl p-4">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Tipo cliente
+            </h3>
+            <form action={setClientTypeAction} className="mt-2.5 space-y-2">
+              <input type="hidden" name="id" value={client.id} />
+              <select
+                name="client_type"
+                defaultValue={client.client_type ?? ""}
+                className="w-full rounded-2xl border border-white/50 bg-white/60 px-3.5 py-2.5 text-sm text-slate-900 backdrop-blur-xl outline-none transition focus:border-brand-400/70 focus:bg-white/80"
+              >
+                <option value="">Da classificare</option>
+                {CLIENT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {CLIENT_TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-brand-600/90 px-4 py-2 text-sm font-semibold text-white shadow-glass-btn transition hover:bg-brand-700"
+              >
+                Salva tipo
+              </button>
+            </form>
+          </div>
+
           <div className="glass-solid rounded-3xl p-4">
             <h3 className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-400">
               <StickyNote className="h-3.5 w-3.5" aria-hidden />

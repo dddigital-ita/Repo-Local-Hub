@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  BarChart3,
   CalendarClock,
   ChevronRight,
   Construction,
   FileSearch,
+  Gauge,
   GraduationCap,
   NotebookPen,
   Palette,
+  RefreshCw,
   ScrollText,
-  ShieldCheck,
   Sparkles,
   Wrench,
 } from "lucide-react";
@@ -51,10 +51,10 @@ const STRUMENTI = [
     text: "Chiudi con garbo il sito pubblico: pagina pulita con contatti e CTA, risposta 503, admin sempre raggiungibile.",
   },
   {
-    href: "/admin/tools/google",
-    Icon: BarChart3,
-    title: "Google growth kit",
-    text: "GA4, Tag Manager, Search Console e PageSpeed: misura, SEO e performance in un posto.",
+    href: "/admin/tools/cache",
+    Icon: RefreshCw,
+    title: "Free cache",
+    text: "Svuota la cache dove serve: tutto il sito o solo home, landing o admin. Contenuti visibili subito.",
   },
 ];
 
@@ -83,16 +83,16 @@ const SISTEMA = [
     text: "Meta, landing, redirect e query reali da Search Console.",
   },
   {
-    href: "/admin/shield",
-    Icon: ShieldCheck,
-    title: "Shield",
-    text: "Rate limiting, ban automatici e eventi di sicurezza.",
-  },
-  {
     href: "/admin/audit",
     Icon: ScrollText,
     title: "Audit",
     text: "Chi ha fatto cosa: registro append-only delle azioni.",
+  },
+  {
+    href: "/admin/tools/perf",
+    Icon: Gauge,
+    title: "Velocità",
+    text: "Tempi di caricamento per pagina, prima/dopo le ottimizzazioni.",
   },
 ];
 
@@ -105,7 +105,6 @@ export default async function ToolsPage() {
     "/admin/tools/theme": statuses.theme,
     "/admin/tools/hero": statuses.hero,
     "/admin/tools/backup": statuses.backup,
-    "/admin/tools/google": statuses.google,
     "/admin/notion": statuses.notion,
   };
   const pillFor = (href: string): React.ReactNode => {

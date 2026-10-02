@@ -1,0 +1,91 @@
+# OVERLAY GUARD in CI — la stessa sentinella del pre-push, server-side.
+#
+# Il repo oggi non ha remote: questo workflow e' pronto per quando verra'
+# pubblicato su GitHub. Blocca merge/push se:
+#   - un position:fixed e' raggiungibile da una superficie glass senza
+#     portale (scripts/overlay-guard.mjs),
+#   - il typecheck o la suite test falliscono.
+#
+# Il guard gira SEMPRE per primo: un violation report chiaro vale piu'
+# di un typecheck verde su codice che non parte.
+
+name: Overlay guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+
+    # L'E2E della chat lead-gen scrive e rilegge un lead: serve un Postgres
+    # effimero (lo stesso di produzione come motore, mai come dati).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      # v5+ girano NATIVE su Node 24 (il vecchio checkout@v4/setup-node@v4
+      # targettavano Node 20: deprecated, forzato su 24 dal runner). Il
+      # breaking change di checkout v6 (allow-unsafe-pr-checkout) riguarda
+      # solo pull_request_target: qui i trigger sono push e pull_request.
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint (ESLint CLI, forma Next 16)
+        run: npm run lint
+
+      - name: Overlay guard (containing block)
+        run: node scripts/overlay-guard.mjs
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: DB E2E disposable (schema + migration)
+        env:
+          E2E_PGPASSWORD: postgres # utente del servizio Postgres qui sopra
+        run: node scripts/e2e-db-reset.mjs
+
+      - name: E2E consenso cookie + chat lead-gen
+        env:
+          E2E_PGPASSWORD: postgres # utente del servizio Postgres qui sopra
+          # DSN COMPLETO per gli attori che leggono l'ambiente e non .env.e2e
+          # (il suo DSN è senza credenziali: bene col Postgres locale in
+          # trust auth, rifiutato dal servizio CI che esige password):
+          # - globalTeardown e2e-leak-guard.mjs (se no: «client password
+          #   must be a string» e utente «runner» rifiutato);
+          # - la spec manutenzione (seed col DSN override).
+          # L'app invece riceve DATABASE_URL qui sotto: l'ambiente vince su
+          # .env.e2e nel wrapper del dev server (e2e-dev-server.mjs).
+          E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wac_e2e
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wac_e2e # per Next
+          # Sessioni e cifratura dell'ambiente E2E (lezione post-mortem: in
+          # locale arriva da .env.local, in CI non esiste — il fallback
+          # "dev-secret-…" funziona ma il contratto è esplicito e diverso
+          # per ambiente, così nessuna firma attraversa gli ambienti).
+          ADMIN_SESSION_SECRET: e2e-secret-per-corri-ci-solo-efimero
+        run: npm run test:e2e

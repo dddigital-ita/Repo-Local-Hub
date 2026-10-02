@@ -29,9 +29,9 @@ import {
  *
  * - Panoramica · Gestione ▾ (Ticket, Lead, Callback, Operatori, Pacchetti)
  *   · Ambrosio AI · Impostazioni · Tools
- * - Notion, SEO, Shield e Audit sono SEZIONI DI TOOLS (pagine di sistema:
+ * - Notion, SEO e Audit sono SEZIONI DI TOOLS (pagine di sistema:
  *   si raggiungono da /admin/tools, dove vivono come card — non sono
- *   navigazione quotidiana).
+ *   navigazione quotidiana); Shield vive in Impostazioni › Protezione.
  *
  * Il pulsante di gruppo porta il nome della pagina attiva (aria-current) e
  * la pillola animata (layoutId condiviso) scivola anche dentro i menu:
@@ -124,15 +124,15 @@ export default function AdminNav({ email, role }: { email: string; role?: string
           </Link>
           {/* Ricerca rapida: salto diretto a qualsiasi scheda (⌘K). */}
           <AdminCommandPalette />
-          <form action="/admin/logout" method="get" className="shrink-0">
-            <Link
-              href="/admin/logout"
+          <form action="/admin/logout" method="post" className="shrink-0">
+            <button
+              type="submit"
               aria-label="Esci dall'area team"
               className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-slate-500 transition hover:bg-white/60 hover:text-slate-900"
             >
               <LogOut className="h-4 w-4" aria-hidden />
               <span className="hidden sm:inline">Esci</span>
-            </Link>
+            </button>
           </form>
         </div>
 
